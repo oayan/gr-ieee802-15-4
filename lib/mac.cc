@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2013 Bastian Bloessl <bloessl@ccs-labs.org>
+ *               2020 Hasan Yagiz Özkan <yagiz.oezkan@tum.de>
+ *               2020 Onur Ayan <onur.ayan@tum.de>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +33,10 @@ struct measurementElement {
     uint32_t sequence;			// sequence number of the arrived packet
     uint32_t arrival;			// arrival time in timeslot (timeslot duration depends on d_timeslot_dur, which is received from app)
 };
+
+// struct plantToControllerFormat {
+//
+// };
 
 using namespace gr::ieee802_15_4;
 
@@ -64,6 +70,8 @@ public:
         // the structure of the thread is taken from "periodic_msg_source_impl.cc" of gr_foo
         // https://github.com/bastibl/gr-foo/blob/maint-3.7/lib/periodic_msg_source_impl.cc
         d_thread = new boost::thread(boost::bind(&mac_impl::run, this, this));
+
+        measurement.reserve(1024);
     }
 
     // includes requirements of the thread with repetitive tasks
@@ -107,22 +115,24 @@ public:
                 }
                 // check for the beginning of the timeslot
                 if(gr::high_res_timer_now() - d_tnow > d_timeslot_dur && d_slotframe_dur != 0) {
+                    // TODO d_slotframe_dur should be selected by grc, not APP layer
                     d_tnow = gr::high_res_timer_now();
                     // check for the beacon timeslot
                     if(d_cnt_timeslot % d_slot_len == 0) {
                         // add sequence number of the current timeslot to the beacon
                         // so plants can synchronize their timeslots for measurements
-                        d_beacon[d_beacon_len-4] = d_cnt_timeslot >> 24 & 0xff;
-                        d_beacon[d_beacon_len-3] = d_cnt_timeslot >> 16 & 0xff;
-                        d_beacon[d_beacon_len-2] = d_cnt_timeslot >> 8 & 0xff;
-                        d_beacon[d_beacon_len-1] = d_cnt_timeslot & 0xff;
+                        d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
+                        d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
+                        d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
+                        d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
                         generate_beacon_ack_mac(d_beacon, d_beacon_len, 0xffff);	//add mac header and footer
                         // send packet
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob(d_msg, d_msg_len)));
+                        // TODO This should be redundant in radio !!!!!!!!!!!!!
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob("1", 1)));
-                        // @TO DO: remove if not necessary
+                        // TODO: remove if not necessary !!!!!!!!!!!!!!!!!!!
                         if(d_cnt_timeslot - d_last_received_ts_num > 750 & d_last_received_ts_num != 0) {
                             d_last_received_ts_num = 0;
                             time_t now = time(0);
@@ -150,9 +160,16 @@ public:
         }
     }
 
-    // a new packet is received
+
+    /**
+    * @brief The mac_in method is called when a new PDU is received from the PHY layer (lower layer).
+    * TODO define what this block is doing in 1-2 sentences
+    * @param msg The received message of pmt::pmt_t type.
+    */
     void mac_in(pmt::pmt_t msg) {
+        // TODO Check whether d_mutex is needed
         d_last_recieved = gr::high_res_timer_now();		// update timer for measurement
+        // TODO This could have been a char array
         pmt::pmt_t blob;
 
         if(pmt::is_pair(msg)) {
@@ -179,42 +196,62 @@ public:
             // space to save received data
             unsigned char buf[256];
             std::memcpy(buf, pmt::blob_data(blob), data_len);
-            char mac_seq[1];
+
             struct measurementElement newElement;
+            // TODO packetToControllerFormat as struct
             newElement.controller_num = buf[17] & 0xff;
             newElement.sequence = (buf[16] << 24) | (buf[15] << 16) | (buf[14] << 8) | buf[13];
             newElement.arrival = d_cnt_timeslot;
             measurement.push_back(newElement);
-            mac_seq[0] = buf[2];					// save mac sequence number to send in ACK
-            uint16_t dest = (buf[8] << 8) | buf[7];	// originator of the packet is destination of ACK
+
+
             // send ACK if ACK-enabled
+            // TODO Standard struct
             if(buf[0] & 0x20) {
+                char mac_seq[1];
+                // Generation of the ACK message with the RX source address as TX destination address
+                mac_seq[0] = buf[2];					    // save mac sequence number to send in ACK
+                uint16_t dest = (buf[8] << 8) | buf[7];	    // originator of the packet is destination of ACK
                 generate_beacon_ack_mac(mac_seq, 1, dest);
                 message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                  pmt::make_blob(d_msg, d_msg_len)));
+                // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
                 message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                  pmt::make_blob("1", 1)));
             }
         }
-
-        pmt::pmt_t mac_payload = pmt::make_blob((char*)pmt::blob_data(blob) + 9 , data_len - 9 - 2);
+        // Drops MAC Header & Footer and forwards the data up to Rime Stack
+        pmt::pmt_t mac_payload = pmt::make_blob((char*)pmt::blob_data(blob) + 9, data_len - 9 - 2);
 
         message_port_pub(pmt::mp("app out"), pmt::cons(pmt::PMT_NIL, mac_payload));
     }
 
 
-    // This messages comes from python application
+    /**
+    * @brief The app_in method is called when a new PDU is received from the Rime Stack (upper layer).
+    * TODO Define what this method is doing in 1-2 sentences
+    * @param msg The received message of pmt::pmt_t type.
+    */
     void app_in(pmt::pmt_t msg) {
+        // TODO Check whether d_mutex is needed
+        // TODO These 2 could have been char array probably
         pmt::pmt_t blob;
         pmt::pmt_t tmp;
 
         // differenciate the schedule packets from control application packets
         uint8_t is_schedule = 0;	// flag for schedule packet
-        tmp = pmt::cdr(msg);
+        
+        // TODO Carry this after the is_eof_object check below. Doing it twice, tmp redundant
+        if(pmt::is_pair(msg)) {
+            tmp = pmt::cdr(msg);
+        } else {
+            assert(false);
+        }
         size_t data_len = pmt::blob_length(tmp);
         unsigned char buf[256];
         std::memcpy(buf, pmt::blob_data(tmp), data_len);
         int i = 0;
+        // TODO 0xaa define 0xaa above
         if (buf[4] == 0xaa) {
             is_schedule = 1;
         }
@@ -240,42 +277,31 @@ public:
             return;
         }
 
-        /* 	schedule packets contains information about number of time slots in a superframe,
+        /* 	schedule packets contain information about number of time slots in a superframe,
                 duration of a timeslot, structure of timeslot this part gets this informations from
                 schedule information message of application	*/
         if(is_schedule == 1) {
+            // TODO struct for schedulePacketFormat
             d_beacon_len = buf[5] + 8;
             //uint16_t dur = (buf[6] | buf[7] << 8) * (buf[5] + 1);
             d_slot_len = buf[5] + 1;
-            d_timeslot_dur = (gr::high_res_timer_tps()/1000) * (buf[6] | buf[7] << 8);
+            d_timeslot_dur = (gr::high_res_timer_tps() / 1000) * (buf[6] | buf[7] << 8);
             d_slotframe_dur = d_timeslot_dur * d_slot_len;
             for(i = 0; i < d_beacon_len; i++) {
                 d_beacon[i] = buf[4 + i];
             }
-            d_beacon[d_beacon_len-4] = d_cnt_timeslot >> 24 & 0xff;
-            d_beacon[d_beacon_len-3] = d_cnt_timeslot >> 16 & 0xff;
-            d_beacon[d_beacon_len-2] = d_cnt_timeslot >> 8 & 0xff;
-            d_beacon[d_beacon_len-1] = d_cnt_timeslot & 0xff;
+            d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
+            d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
+            d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
+            d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
             d_tnow = gr::high_res_timer_now();
         }
-
-        //dout << "MAC: received new message from APP of length " << pmt::blob_length(blob) << std::endl;
-        // if(is_schedule){
-        //   char schedule_msg[12];
-        //   int schedule_msg_len = 1;
-        //   schedule_msg[9] = 0x00;
-        //   schedule_msg_len = generate_mac_scheduler(schedule_msg, schedule_msg_len);
-        //   message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-        // 			pmt::make_blob(&schedule_msg, schedule_msg_len)));
-        // 			message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-        // 			  			pmt::make_blob("1", 1)));
-        // 			printf("MAC: message sent\n");
-        // } else {
 
         /* 	if it is a control application packet, identify the plant number (provided by application)
                 as destination address and sent. Receiver MAC checks the destination address */
         if(is_schedule == 0) {
-            uint16_t dest_addr = buf[4] | (buf[5]<<8);
+            // TODO controllerToPlantPacketFormat
+            uint16_t dest_addr = buf[4] | (buf[5] << 8);
             // for(i = 8; i < data_len; i++){
             // 	buf[i-4] = buf[i];
             // }
@@ -283,11 +309,10 @@ public:
             //print_message();
             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                              pmt::make_blob(d_msg, d_msg_len)));
-            // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-            // 		  			pmt::make_blob("1", 1)));
+            //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
+            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+            		  			pmt::make_blob("1", 1)));
         }
-        // }
-
     }
 
     uint16_t crc16(char *buf, int len) {
@@ -346,10 +371,10 @@ public:
         // fcf of beacon and ack packets depending on IEEE 802.15.4 standard
         if(len > 1) {
             d_msg[0] = d_fcf_beacon & 0xFF;
-            d_msg[1] = (d_fcf_beacon>>8) & 0xFF;
+            d_msg[1] = (d_fcf_beacon >> 8) & 0xFF;
         } else {
             d_msg[0] = d_fcf_ack & 0xFF;
-            d_msg[1] = (d_fcf_ack>>8) & 0xFF;
+            d_msg[1] = (d_fcf_ack >> 8) & 0xFF;
         }
 
 
@@ -444,7 +469,7 @@ private:
     uint8_t     d_slot_len;					// this value is taken from application number of timeslots in a superframe
     // this value is taken from application duration of superframe (d_timeslot_dur x d_slot_len)
     long long int    d_slotframe_dur = 0;
-    long long int    d_last_recieved = 0;	// to save the time of last received packet
+    long long int    d_last_recieved = 0;	// stores the reception time of latest received packet
     char    	d_beacon[50];				// place to save the beacon packet (the structure received one time from application)
     uint8_t		d_beacon_len = 0;			// this value is taken from application length of beacon depends on d_slot_len
 
