@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<block>
+  <name>mac_plant</name>
+  <key>ieee802_15_4_mac_plant</key>
+  <category>[IEEE802.15.4]</category>
+  <import>import ieee802_15_4</import>
+  <make>ieee802_15_4.mac_plant($debug,$method,$fcf,$seq_nr,$dst_pan,$dst,$src,$schedule)</make>
+  <!-- Make one 'param' node for every Parameter you want settable from the GUI.
+       Sub-nodes:
+       * name
+       * key (makes the value accessible as $keyname, e.g. in the make node)
+       * type -->
+       <param>
+     		<name>Debug</name>
+     		<key>debug</key>
+     		<value>False</value>
+     		<type>bool</type>
+
+     		<option>
+     			<name>Enable</name>
+     			<key>True</key>
+     		</option>
+     		<option>
+     			<name>Disable</name>
+     			<key>False</key>
+     		</option>
+     	</param>
+        <param>
+            <name>Method</name>
+            <key>method</key>
+            <value>False</value>
+            <type>hex</type>
+
+            <option>
+                <name>FCFS-TailDrop</name>
+                <key>0</key>
+            </option>
+            <option>
+                <name>FCFS-FrontDrop</name>
+                <key>3</key>
+            </option>
+            <option>
+                <name>LCFS-PD</name>
+                <key>1</key>
+            </option>
+            <option>
+                <name>TryOnceDiscard-TailDrop</name>
+                <key>2</key>
+            </option>
+            <option>
+                <name>TryOnceDiscard-FrontDrop</name>
+                <key>4</key>
+            </option>
+            <option>
+                <name>WithoutBeacon</name>
+                <key>5</key>
+            </option>
+        </param>
+     	<param>
+     		<name>Frame Control</name>
+     		<key>fcf</key>
+     		<value>0x8841</value>
+     		<type>hex</type>
+     	</param>
+     	<param>
+     		<name>Sequence Number</name>
+     		<key>seq_nr</key>
+     		<value>0</value>
+     		<type>hex</type>
+     	</param>
+     	<param>
+     		<name>Destination PAN</name>
+     		<key>dst_pan</key>
+     		<value>0x1aaa</value>
+     		<type>hex</type>
+     	</param>
+     	<param>
+     		<name>Destination Address</name>
+     		<key>dst</key>
+     		<value>0xffff</value>
+     		<type>hex</type>
+     	</param>
+     	<param>
+     		<name>Source Address</name>
+     		<key>src</key>
+     		<value>0x3344</value>
+     		<type>hex</type>
+     	</param>
+      <param>
+        <name>Plant ID</name>
+        <key>schedule</key>
+        <value>0x01</value>
+        <type>hex</type>
+      </param>
+     	<sink>
+     		<name>pdu in</name>
+     		<type>message</type>
+     		<optional>1</optional>
+     	</sink>
+     	<sink>
+     		<name>app in</name>
+     		<type>message</type>
+     		<optional>1</optional>
+     	</sink>
+     	<source>
+     		<name>pdu out</name>
+     		<type>message</type>
+     		<optional>1</optional>
+     	</source>
+     	<source>
+     		<name>app out</name>
+     		<type>message</type>
+     		<optional>1</optional>
+     	</source>
+
+     </block>
