@@ -50,6 +50,7 @@ list(APPEND ieee802_15_4_sources
     zeropadding_b_impl.cc
     zeropadding_removal_b_impl.cc
     mac_plant_impl.cc
+    mac_controller_impl.cc
 )
 
 list(APPEND ieee802_15_4_libs

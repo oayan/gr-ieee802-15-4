@@ -47,6 +47,7 @@
 #include "ieee802_15_4/zeropadding_b.h"
 #include "ieee802_15_4/zeropadding_removal_b.h"
 #include "ieee802_15_4/mac_plant.h"
+#include "ieee802_15_4/mac_controller.h"
 %}
 
 %include "ieee802_15_4/access_code_prefixer.h"
@@ -101,3 +102,5 @@ GR_SWIG_BLOCK_MAGIC2(ieee802_15_4, zeropadding_b);
 GR_SWIG_BLOCK_MAGIC2(ieee802_15_4, zeropadding_removal_b);
 %include "ieee802_15_4/mac_plant.h"
 GR_SWIG_BLOCK_MAGIC2(ieee802_15_4, mac_plant);
+%include "ieee802_15_4/mac_controller.h"
+GR_SWIG_BLOCK_MAGIC2(ieee802_15_4, mac_controller);
