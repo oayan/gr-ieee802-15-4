@@ -45,7 +45,7 @@ public:
 
 #define dout d_debug && std::cout
 
-    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src) :
+    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms) :
         block ("mac_controller",
                gr::io_signature::make(0, 0, 0),
                gr::io_signature::make(0, 0, 0)),
@@ -56,6 +56,8 @@ public:
         d_dst_pan(dst_pan),
         d_dst(dst),
         d_src(src),
+        d_save_stats(0),
+        d_timeslot_dur((gr::high_res_timer_tps() / 1000) * ts_dur_ms),
         d_num_packet_errors(0),
         d_num_packets_received(0) {
 
@@ -465,6 +467,7 @@ private:
     uint16_t    d_dst_pan;
     uint16_t    d_dst;
     uint16_t    d_src;
+    uint16_t    d_save_stats;
     char        d_msg[256];
 
     gr::high_res_timer_type d_tnow;     // to save the start time of current timeslot
@@ -490,6 +493,6 @@ private:
 };
 
 mac_controller::sptr
-mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src) {
-    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,dst,src));
+mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms) {
+    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,dst,src,ts_dur_ms));
 }
