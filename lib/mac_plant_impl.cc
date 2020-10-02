@@ -29,7 +29,7 @@
 
 struct queueElement {
     uint32_t seq;			//
-    uint8_t retransmission;	// number of remaining retransmission attempts
+    uint8_t remainingRetransmissionAttempts;	// number of remaining retransmission attempts
     int len;
     char data[256];
 };
@@ -53,7 +53,6 @@ public:
 
 #define dout d_debug && std::cout
 
-
     mac_plant_impl(bool debug, int method, int fcf, int seq_nr, int dst_pan, int dst, int src, int schedule) :
         block ("mac_plant",
                gr::io_signature::make(0, 0, 0),
@@ -65,7 +64,7 @@ public:
         d_dst_pan(dst_pan),
         d_dst(dst),
         d_src(src),
-        d_method(method),
+        mQueuingStrategy(static_cast<QueuingStrategies>(method)),
         d_schedule(schedule),
         d_num_packet_errors(0),
         d_num_packets_received(0) {
@@ -93,55 +92,21 @@ public:
         try {
             // flow graph startup delay
             boost::this_thread::sleep(boost::posix_time::milliseconds(500));
-            int cnt = 0;
-            int i = 0;
+            queue.reserve(1000);
+            queueValues.reserve(1000);
+
             while(1) {
 
                 boost::this_thread::sleep(boost::posix_time::microseconds(250));
                 gr::thread::scoped_lock(d_mutex);
-                // TODO Save stats
                 // TODO Measurement variables, notations & implementation
-                // TODO Create and call saveStats() method inside this class
-                if (d_method == 5 && (gr::high_res_timer_now() - d_last_pack_recieved) > (gr::high_res_timer_tps() * 5) && d_last_pack_recieved != 0) {
-                    d_last_pack_recieved = 0;
-                    std::ofstream tmpfile;
-                    time_t now = time(0);
-                    tm *ltm = localtime(&now);
-                    char file_name [255];
-                    sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, d_method);
-                    tmpfile.open (file_name);
-                    if(!tmpfile) {
-                        printf("could not opened\n");
-                    }
-                    for(i = 0; i < 10000; i++) {
-                        tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
-                        // printf("%d, ", (rtt_measure[i]));
-                        if(i%10 == 100)
-                            printf("1\n");
-                    }
-                    tmpfile.close();
-                    sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule,d_method);
-                    tmpfile.open (file_name);
-                    while(!queueValues.empty()) {
-                        struct queueMeasureElement toWrite = queueValues[0];
-                        queueValues.erase(queueValues.begin());
-                        tmpfile << toWrite.timeslot_seq << "," << toWrite.queuesize << std::endl;
-                    }
-                    tmpfile.close();
-                    // TODO Change this, RTT measurement could be enough
-                    sprintf(file_name,"../../results/results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, d_method);
-                    tmpfile.open (file_name);
-                    i = 0;
-                    while(i < 10000) {
-                        struct aoiMeasurementElement toWrite = aoiValues[i];
-                        tmpfile << toWrite.sequence << "," << toWrite.arrival << "," << toWrite.sent << "," << toWrite.answer << std::endl;
-                        i++;
-                    }
-                    tmpfile.close();
+
+                if ((mQueuingStrategy == QueuingStrategies::No_Queue) && (gr::high_res_timer_now() - d_last_pack_recieved) > (gr::high_res_timer_tps() * 5) && d_last_pack_recieved != 0) {
+                    saveStats();
                     printf("end of plant\n");
                 }
-                // TODO Save stats
-                // TODO vector.reserve()
+
+                
                 // TODO Slot Dur <--> Method type
                 if(gr::high_res_timer_now() - d_tnow > d_slot_dur && d_slot_dur != 0) {
                     d_seq_timeslot++;
@@ -159,13 +124,10 @@ public:
                         struct queueElement newElement;
                         rtt_start = gr::high_res_timer_now();
                         newElement = queue[0];
-                        // TODO rename: remaining retransmission attempts
-                        // TODO Method enum instead of 2, 4
-                        // TODO rename method to queing strategy
-                        if(newElement.retransmission == 1 || d_method == 2 || d_method == 4) {
+                        if((newElement.remainingRetransmissionAttempts == 1) || (mQueuingStrategy == QueuingStrategies:: TOD_TailDrop) || (mQueuingStrategy == QueuingStrategies::TOD_FrontDrop)) {
                             queue.erase(queue.begin());
                         } else {
-                            queue[0].retransmission = queue[0].retransmission - 1;
+                            queue[0].remainingRetransmissionAttempts = queue[0].remainingRetransmissionAttempts - 1;
                         }
 
                         aoiValues[newElement.seq].sent = d_seq_timeslot;
@@ -182,41 +144,8 @@ public:
 
                     // TODO REMOVE THIS WITH SAVE STATS
                     // TODO redundant with above
-                    if ((gr::high_res_timer_now() - d_last_pack_recieved) > (gr::high_res_timer_tps()*5) && d_last_pack_recieved != 0) {
-                        d_last_pack_recieved = 0;
-                        std::ofstream tmpfile;
-                        time_t now = time(0);
-                        tm *ltm = localtime(&now);
-                        char file_name [255];
-                        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, d_method);
-                        tmpfile.open (file_name);
-                        if(!tmpfile) {
-                            printf("could not opened\n");
-                        }
-                        for(i = 0; i < 10000; i++) {
-                            tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
-                            // printf("%d, ", (rtt_measure[i]));
-                            if(i%1000 == 9)
-                                printf("%d\n",i);
-                        }
-                        tmpfile.close();
-                        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule,d_method);
-                        tmpfile.open (file_name);
-                        while(!queueValues.empty()) {
-                            struct queueMeasureElement toWrite = queueValues[0];
-                            queueValues.erase(queueValues.begin());
-                            tmpfile << toWrite.timeslot_seq << "," << toWrite.queuesize << std::endl;
-                        }
-                        tmpfile.close();
-                        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule,d_method);
-                        tmpfile.open (file_name);
-                        i = 0;
-                        while(i < 10000) {
-                            struct aoiMeasurementElement toWrite = aoiValues[i];
-                            tmpfile << toWrite.sequence << "," << toWrite.arrival << "," << toWrite.sent << "," << toWrite.answer << std::endl;
-                            i++;
-                        }
-                        tmpfile.close();
+                    if ((gr::high_res_timer_now() - d_last_pack_recieved) > (gr::high_res_timer_tps() * 5) && d_last_pack_recieved != 0) {
+                        saveStats();
                         printf("end of plant\n");
                     }
                     d_current_slotframe = d_current_slotframe << 1 | ( 0x1 & (d_slotframe >> (d_slot_len - d_last_position)));
@@ -236,7 +165,7 @@ public:
     * \param msg The received message of pmt::pmt_t type.
     */
     void mac_plant_in(pmt::pmt_t msg) {
-        // TODO Check whether d_mutex is needed
+        gr::thread::scoped_lock(d_mutex);
         pmt::pmt_t blob;
 
         // TODO This could have been a char array
@@ -328,7 +257,7 @@ public:
     * \param msg The received message of pmt::pmt_t type.
     */
     void app_in(pmt::pmt_t msg) {
-        // TODO Mutex
+        gr::thread::scoped_lock(d_mutex);
         pmt::pmt_t blob;
 
         mac_wait_start = gr::high_res_timer_now();
@@ -362,8 +291,8 @@ public:
 
         //dout << "MAC: received new message from APP of length " << pmt::blob_length(blob) << std::endl;
 
-        generate_mac_plant((const char*)pmt::blob_data(blob), pmt::blob_length(blob));
-        
+        generateMacPlant((const char*)pmt::blob_data(blob), pmt::blob_length(blob));
+
         // TODO If method .. add to queue or send directly
         addToQueue(d_msg, d_msg_len, seq);
         if(seq == 9999) {
@@ -392,22 +321,131 @@ public:
         return crc;
     }
 
+
+    void print_message() {
+        for(int i = 0; i < d_msg_len; i++) {
+            dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
+            if(i % 16 == 15) {
+                dout << std::endl;
+            }
+        }
+        dout << std::endl;
+    }
+
+    int get_num_packet_errors() {
+        return d_num_packet_errors;
+    }
+
+    int get_num_packets_received() {
+        return d_num_packets_received;
+    }
+
+    float get_packet_error_ratio() {
+        return float(d_num_packet_errors)/d_num_packets_received;
+    }
+
+// Private Attributes
+private:
+    
+    bool        d_debug;
+    int         d_msg_len;
+    uint16_t    d_fcf;
+    uint8_t     d_seq_nr;
+    uint16_t    d_dst_pan;
+    uint16_t    d_dst;
+    uint16_t    d_src;
+    char        d_msg[256];
+    char        response[20];
+    // picking 10 as the array size
+    // std::vector<std::array<char, 10>> va;
+    uint8_t    	d_queue_size = 5;
+    QueuingStrategies    mQueuingStrategy;
+    std::vector<queueElement> queue;
+    gr::high_res_timer_type d_tnow;
+    uint16_t	d_schedule;
+    long long int    d_slot_dur = 0;
+    uint32_t    d_seq_timeslot = 0;
+    uint32_t    d_current_slotframe = 0;
+    uint32_t    d_slotframe = 0;
+    uint8_t     d_last_position;
+    uint8_t     d_slot_len;
+    uint8_t		d_retransmission_attempt = 2;
+    uint16_t    d_old_queue_size = 0;
+    uint64_t 	mac_to_app[10000];
+    uint64_t 	ack_receive[10000];
+    long long int 	d_last_pack_recieved = 0;
+    long long int 	rtt_start;
+    uint64_t 	mac_send[10000];
+    uint64_t 	app_to_mac[10000];
+    long long int 	mac_wait_start;
+    long long int tpus = (gr::high_res_timer_tps() / 1000000);
+    std::vector<queueMeasureElement>	queueValues;
+    aoiMeasurementElement	aoiValues[10000];
+
+
+    bool d_finished = false;
+    boost::thread *d_thread;
+    gr::thread::mutex d_mutex;
+
+    int d_num_packet_errors;
+    int d_num_packets_received;
+
+    // Private Methods
+private:
+    void saveStats() {
+        d_last_pack_recieved = 0;
+        std::ofstream tmpfile;
+        time_t now = time(0);
+        tm *ltm = localtime(&now);
+        char file_name [255];
+        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        tmpfile.open (file_name);
+        if(!tmpfile) {
+            printf("could not opened\n");
+        }
+        for(int i = 0; i < 10000; i++) {
+            tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
+            // printf("%d, ", (rtt_measure[i]));
+            if(i%10 == 100)
+                printf("1\n");
+        }
+        tmpfile.close();
+        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        tmpfile.open (file_name);
+        while(!queueValues.empty()) {
+            struct queueMeasureElement toWrite = queueValues[0];
+            queueValues.erase(queueValues.begin());
+            tmpfile << toWrite.timeslot_seq << "," << toWrite.queuesize << std::endl;
+        }
+        tmpfile.close();
+        // TODO Change this, RTT measurement could be enough
+        sprintf(file_name,"../../results/results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        tmpfile.open (file_name);
+        int i = 0;
+        while(i < 10000) {
+            struct aoiMeasurementElement toWrite = aoiValues[i];
+            tmpfile << toWrite.sequence << "," << toWrite.arrival << "," << toWrite.sent << "," << toWrite.answer << std::endl;
+            i++;
+        }
+        tmpfile.close();
+    }
+
     void addToQueue(char *pck, int len, uint32_t seq_no) {
         struct queueElement newElement;
         newElement.len = len;
         newElement.seq = seq_no;
-        newElement.retransmission = d_retransmission_attempt;
+        newElement.remainingRetransmissionAttempts = d_retransmission_attempt;
         int i;
         for (i = 0; i < len; i++)
             newElement.data[i] = pck[i];
-        
+
         // TODO Method enum
-        if(d_method == 1 & !queue.empty()) {
+        if((mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) & !queue.empty()) {
             while(!queue.empty()) {
                 queue.erase(queue.begin());
             }
             queue.push_back(newElement);
-        } else if (d_method == 5) {
+        } else if (mQueuingStrategy == QueuingStrategies::No_Queue) {
             // RANDOM ACCESS - No Wait
             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                              pmt::make_blob(newElement.data, newElement.len)));
@@ -416,7 +454,7 @@ public:
         } else if (queue.size() < d_queue_size) {
             // There is space in the TX queue
             queue.push_back(newElement);
-        } else if (d_method == 3 || d_method == 4) {
+        } else if (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop || mQueuingStrategy == QueuingStrategies::TOD_FrontDrop) {
             // Front drop
             while(queue.size() >= d_queue_size) {
                 queue.erase(queue.begin());
@@ -441,13 +479,13 @@ public:
         }
         return 0;
     }
-
-    void generate_mac_plant(const char *buf, int len) {
+    
+        void generateMacPlant(const char *buf, int len) {
 
         // FCF
         // data frame, no security
         d_msg[0] = d_fcf & 0xFF;
-        if(d_method == 0 || d_method == 1 || d_method == 3) {
+        if((mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
             d_msg[0] = d_msg[0] | 0x20;
         }
         //printf("%c", d_msg[0]);
@@ -474,102 +512,6 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
-    int generate_mac_plant_ack(char *buf, int len) {
-
-        // FCF
-        // data frame, no security
-        buf[0] = d_fcf & 0xFF;
-        //printf("%c", d_msg[0]);
-        buf[1] = (d_fcf>>8) & 0xFF;
-
-        // seq nr
-        buf[2] = d_seq_nr++;
-
-        // addr info
-        buf[3] = d_dst_pan & 0xFF;
-        buf[4] = (d_dst_pan >> 8) & 0xFF;
-        buf[5] = d_dst & 0xFF;
-        buf[6] = (d_dst >> 8) & 0xFF;
-        buf[7] = d_src & 0xFF;
-        buf[8] = (d_src >> 8) & 0xFF;
-
-        //std::memcpy(d_msg + 9, buf, len);
-
-        uint16_t crc = crc16(buf, len + 9);
-
-        buf[ 9 + len] = crc & 0xFF;
-        buf[10 + len] = crc >> 8;
-
-        return (9 + len + 2);
-    }
-
-    void print_message() {
-        for(int i = 0; i < d_msg_len; i++) {
-            dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
-            if(i % 16 == 15) {
-                dout << std::endl;
-            }
-        }
-        dout << std::endl;
-    }
-
-    int get_num_packet_errors() {
-        return d_num_packet_errors;
-    }
-
-    int get_num_packets_received() {
-        return d_num_packets_received;
-    }
-
-    float get_packet_error_ratio() {
-        return float(d_num_packet_errors)/d_num_packets_received;
-    }
-
-private:
-    bool        d_debug;
-    int         d_msg_len;
-    uint16_t    d_fcf;
-    uint8_t     d_seq_nr;
-    uint16_t    d_dst_pan;
-    uint16_t    d_dst;
-    uint16_t    d_src;
-    char        d_msg[256];
-    char        response[20];
-    // picking 10 as the array size
-    // std::vector<std::array<char, 10>> va;
-    uint8_t    	d_queue_size = 5;
-    uint32_t    d_method;
-    std::vector<queueElement> queue;
-    gr::high_res_timer_type d_tnow;
-    int loopStarted = 0;
-    uint16_t	d_schedule;
-    long long int    d_slot_dur = 0;
-    uint32_t    d_seq_timeslot = 0;
-    uint32_t    d_current_slotframe = 0;
-    uint32_t    d_slotframe = 0;
-    uint8_t     d_last_position;
-    uint8_t     d_slot_len;
-    uint8_t		d_retransmission_attempt = 2;
-    uint16_t    d_old_queue_size = 0;
-    uint64_t 	mac_to_app[10000];
-    uint64_t 	ack_receive[10000];
-    long long int 	d_last_pack_recieved = 0;
-    long long int 	rtt_start;
-    uint64_t 	mac_send[10000];
-    uint64_t 	app_to_mac[10000];
-    long long int 	mac_wait_start;
-    uint16_t		rtt_count = 0;
-    long long int tpus = (gr::high_res_timer_tps() / 1000000);
-    std::vector<queueMeasureElement>	queueValues;
-    aoiMeasurementElement	aoiValues[10000];
-
-
-    bool d_finished = false;
-    boost::thread *d_thread;
-    gr::thread::mutex d_mutex;
-
-    int d_num_packet_errors;
-    int d_num_packets_received;
 };
 
 

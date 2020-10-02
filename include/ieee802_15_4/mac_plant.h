@@ -28,7 +28,7 @@ namespace gr {
 namespace ieee802_15_4 {
 
 /*!
- * \brief <+description of block+>
+ * \brief This block implements the MAC Layer processing of the plant side
  * \ingroup ieee802_15_4
  *
  */
@@ -49,7 +49,17 @@ public:
                      int dst=0xffff,        // Destination Address (0xffff broadcast)
                      int src=0x3344,        // Source Address
                      int schedule = 0x01);  // Plant ID TODO To be removed
-};  // TODO Save stats
+    
+protected:
+    enum QueuingStrategies {
+        FCFS_TailDrop = 0,
+        LCFS_PacketDiscard = 1,
+        TOD_TailDrop = 2,
+        FCFS_FrontDrop = 3,
+        TOD_FrontDrop = 4,
+        No_Queue = 5
+    };
+};
 
 } // namespace ieee802_15_4
 } // namespace gr
