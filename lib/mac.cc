@@ -96,6 +96,7 @@ public:
 
                 gr::thread::scoped_lock(d_mutex);
                 // end of the measurements when do not receive any packet for 10 seconds
+                // TODO Save stats
                 if(gr::high_res_timer_now() - d_last_recieved > (gr::high_res_timer_tps() * 10) && d_last_recieved != 0) {
                     // at the end of current measurement set d_last_receive to 0 so another received packet restarts the process
                     d_last_recieved = 0;
@@ -133,6 +134,7 @@ public:
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob("1", 1)));
                         // TODO: remove if not necessary !!!!!!!!!!!!!!!!!!!
+                        // TODO save stats
                         if(d_cnt_timeslot - d_last_received_ts_num > 750 & d_last_received_ts_num != 0) {
                             d_last_received_ts_num = 0;
                             time_t now = time(0);
@@ -347,10 +349,11 @@ public:
         d_msg[3] = d_dst_pan & 0xFF;
         d_msg[4] = (d_dst_pan>>8) & 0xFF;
         //destination addr
+        // TODO Get rid of plant_id, create a look-up table for plant_id & dest_addr
         d_msg[5] = addr & 0xFF;
-        d_msg[6] = (addr>>8) & 0xFF;
+        d_msg[6] = (addr >> 8) & 0xFF;
         d_msg[7] = d_src & 0xFF;
-        d_msg[8] = (d_src>>8) & 0xFF;
+        d_msg[8] = (d_src >> 8) & 0xFF;
 
         std::memcpy(d_msg + 9, buf, len);
 

@@ -38,18 +38,18 @@ public:
     virtual int get_num_packet_errors() = 0;
     virtual int get_num_packets_received() = 0;
     virtual float get_packet_error_ratio() = 0;
-
+    
     typedef boost::shared_ptr<mac_plant> sptr;
     static sptr make(bool debug=false,
                      int method = 0,
                      /* default values for receive sensitivity testing in Zigbee test spec 14-0332-01 */
-                     int fcf=0x8841,
-                     int seq_nr=0,
-                     int dst_pan=0x1aaa,
-                     int dst=0xffff,
-                     int src=0x3344,
-                     int schedule = 0x01);
-};
+                     int fcf=0x8841,        // Frame control field
+                     int seq_nr=0,          // Initial sequence number
+                     int dst_pan=0x1aaa,    // Personal Area Network Address
+                     int dst=0xffff,        // Destination Address (0xffff broadcast)
+                     int src=0x3344,        // Source Address
+                     int schedule = 0x01);  // Plant ID TODO To be removed
+};  // TODO Save stats
 
 } // namespace ieee802_15_4
 } // namespace gr
