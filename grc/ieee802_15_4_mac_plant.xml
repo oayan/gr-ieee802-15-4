@@ -36,16 +36,16 @@
                 <key>0</key>
             </option>
             <option>
-                <name>FCFS-FrontDrop</name>
-                <key>3</key>
-            </option>
-            <option>
                 <name>LCFS-PD</name>
                 <key>1</key>
             </option>
-            <option>
+           <option>
                 <name>TryOnceDiscard-TailDrop</name>
                 <key>2</key>
+            </option>
+            <option>
+                <name>FCFS-FrontDrop</name>
+                <key>3</key>
             </option>
             <option>
                 <name>TryOnceDiscard-FrontDrop</name>
