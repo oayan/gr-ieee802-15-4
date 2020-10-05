@@ -41,6 +41,7 @@ install(FILES
     zeropadding_b.h
     zeropadding_removal_b.h
     mac_plant.h
-    mac_controller.h DESTINATION ${GR_INCLUDE_DIR}/gnuradio/ieee802_15_4
+    mac_controller.h
+    protocol.h DESTINATION ${GR_INCLUDE_DIR}/gnuradio/ieee802_15_4
     COMPONENT "ieee802_15_4_devel"
 )

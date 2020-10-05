@@ -21,11 +21,18 @@
 #include <gnuradio/io_signature.h>
 #include <gnuradio/block_detail.h>
 #include <gnuradio/high_res_timer.h>
+#include <ieee802_15_4/protocol.h>
 
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <fstream>
+
+#define MIN_PKT_LEN 11
+#define BROADCAST_ADDR 0xFFFF
+#define SEND_SINGLE_BYTE false
+
+using namespace gr::ieee802_15_4;
 
 struct queueElement {
     uint32_t seq;			//
@@ -33,6 +40,13 @@ struct queueElement {
     int len;
     char data[256];
 };
+
+// struct queueElementTyped {
+//     uint32_t seq;			//
+//     uint8_t remainingRetransmissionAttempts;	// number of remaining retransmission attempts
+//     int len;
+//     PlantToControllerPacket tx_pkt;
+// };
 
 struct queueMeasureElement {
     uint16_t queuesize;
@@ -46,7 +60,7 @@ struct aoiMeasurementElement {
     uint32_t answer;
 };
 
-using namespace gr::ieee802_15_4;
+
 
 class mac_plant_impl : public mac_plant {
 public:
@@ -63,7 +77,7 @@ public:
         d_seq_nr(seq_nr),
         d_dst_pan(dst_pan),
         d_dst(dst),
-        d_src(src),
+        mSrcAddr(src),
         mQueuingStrategy(static_cast<QueuingStrategies>(method)),
         d_schedule(schedule),
         d_num_packet_errors(0),
@@ -106,7 +120,7 @@ public:
                     printf("end of plant\n");
                 }
 
-                
+
                 // TODO Slot Dur <--> Method type
                 if(gr::high_res_timer_now() - d_tnow > d_slot_dur && d_slot_dur != 0) {
                     d_seq_timeslot++;
@@ -137,9 +151,11 @@ public:
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob(newElement.data, newElement.len)));
 
-                        // TODO This should be redundant with USRP usage!!!!!!!
-                        message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                                         pmt::make_blob("1", 1)));
+                        if (SEND_SINGLE_BYTE) {
+                            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                                             pmt::make_blob("1", 1)));
+                        }
+
                     }
 
                     // TODO REMOVE THIS WITH SAVE STATS
@@ -168,7 +184,6 @@ public:
         gr::thread::scoped_lock(d_mutex);
         pmt::pmt_t blob;
 
-        // TODO This could have been a char array
         if(pmt::is_pair(msg)) {
             blob = pmt::cdr(msg);
         }
@@ -178,18 +193,22 @@ public:
 
         size_t data_len = pmt::blob_length(blob);
         unsigned char buf[256];
-        // TODO print packet method
         std::memcpy(buf, pmt::blob_data(blob), data_len);
 
-        // TODO struct for packet
-        uint16_t fcf = (buf[1] << 8) | buf[0];
-        uint8_t mac_seq = buf[2];
-        // TODO check byte order with standard
-        uint16_t dest = buf[5] | (buf[6] << 8);
+        ControllerToPlantPacket* rx_pkt = (ControllerToPlantPacket*)pmt::blob_data(blob);
+
+//         for(int i = 0; i < data_len; i++) {
+//             dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)buf[i] & 0xFF) << std::dec << " ";
+//             if(i % 16 == 15) {
+//                 dout << std::endl;
+//             }
+//         }
+//         dout << std::endl;
+
+        uint16_t dest = rx_pkt->dstAddr;
 
         // Return if packet contains only header & footer
-        // TODO Define minimum packet length
-        if(data_len < 11) {
+        if(data_len < MIN_PKT_LEN) {
             // printf("MAC: frame too short. Dropping!\n");
             return;
         }
@@ -201,12 +220,17 @@ public:
             return;
         }
 
-        // TODO Frame control field masks
-        // TODO #define MASK_FRAME_TYPE 0x0007
-        // //TODO process beacon method
-        if((fcf & 0x0007) == 0) {
+        if(protocol::isBeacon(rx_pkt->frameControlField)) {
+//                     for(int i = 0; i < data_len; i++) {
+//             dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)buf[i] & 0xFF) << std::dec << " ";
+//             if(i % 16 == 15) {
+//                 dout << std::endl;
+//             }
+//         }
+//         dout << std::endl;
             uint16_t dur = buf[11] | buf[12] << 8;
             d_slot_len = buf[10] + 1;
+//             std::cout << dur << " B B " << d_slot_len << std::endl;
             int i = 0;
             // Comment: Schedule extraction process
             for (i = 0; i < 32; i++) {
@@ -223,28 +247,27 @@ public:
             d_tnow = gr::high_res_timer_now();
             //queue.erase()
             return;
-        } else if((fcf & 0x0007) == 0x0002 & dest == d_src) {
+        } else if(protocol::isACK(rx_pkt->frameControlField) && (dest == mSrcAddr)) {
             uint8_t ack_seq = buf[9];                             // MAC Layer sequence number
             uint32_t pck_seq = findAndRemoveFromQueue(ack_seq);   // APP Layer seq_num
             if(pck_seq < 10000) {
                 ack_receive[pck_seq] = (gr::high_res_timer_now() / tpus);  // MAC2MAC
             }
             return;
-        } else if(dest != d_schedule && dest != 0xFF ) {
+        } else if(dest != d_schedule && dest != BROADCAST_ADDR ) {
             // Not broadcast or not my packet
             // TODO Mapping to Dest Address & Source Address
             return;
         }
-        // TODO Controller to Plant Packet format
-        uint32_t seq = (buf[20] << 24) | (buf[19] << 16) | (buf[18] << 8) | buf[17];
+
+        uint32_t seqNum = rx_pkt->seqNum;
         d_num_packets_received++;
 
-        // TODO Do we need this if?
-        if(seq <= 9999) {
-            aoiValues[seq].answer = d_seq_timeslot;
-            if(mac_to_app[seq] == 0)
-                mac_to_app[seq] = (gr::high_res_timer_now() / tpus);
-        }
+
+        aoiValues[seqNum].answer = d_seq_timeslot;
+        if(mac_to_app[seqNum] == 0)
+            mac_to_app[seqNum] = (gr::high_res_timer_now() / tpus);
+
         // Drops MAC Header & Footer and forwards the data up to Rime Stack
         pmt::pmt_t mac_plant_payload = pmt::make_blob((char*)pmt::blob_data(blob) + 9 , data_len - 9 - 2);
 
@@ -276,26 +299,45 @@ public:
         }
 
         size_t data_len = pmt::blob_length(blob);
+        char* data = (char*) pmt::blob_data(blob);
         unsigned char buf[256];
-        std::memcpy(buf, pmt::blob_data(blob), data_len);
-        // TODO PKT FORMAT
-        uint32_t seq = (buf[7] << 24) | (buf[6] << 16) | (buf[5] << 8) | buf[4];
-        // printf("%d\n", seq);
-        struct aoiMeasurementElement newElement;
-        newElement.sequence = seq;
-        newElement.arrival = d_seq_timeslot;
-        newElement.sent = 0;
-        newElement.answer = 0;
-        aoiValues[seq] = newElement;
-        app_to_mac[seq] = mac_wait_start / tpus;
+        std::memcpy(buf, data, data_len);
+        
+        
+        
+        
+        // Fill the Payload Part of the packet with data coming from Rime Stack
+//         std::memcpy(&(tx_pkt.RIMEHeader),
+//                     data,
+//                     sizeof(tx_pkt.RIMEHeader) + sizeof(tx_pkt.loopID) + sizeof(tx_pkt.seqNum) + sizeof(*(tx_pkt.state) * STATE_VECTOR_LEN));
+        
+//         for(int i = 0; i < data_len; i++) {
+//             dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)buf[i] & 0xFF) << std::dec << " ";
+//             if(i % 16 == 15) {
+//                 dout << std::endl;
+//             }
+//         }
+//         dout << std::endl;
+        
+//         printf("%08x\n", tx_pkt.seqNum);
+
+ 
+
 
         //dout << "MAC: received new message from APP of length " << pmt::blob_length(blob) << std::endl;
 
-        generateMacPlant((const char*)pmt::blob_data(blob), pmt::blob_length(blob));
+        PlantToControllerPacket tx_pkt = generateMacPlant((const char*)pmt::blob_data(blob), pmt::blob_length(blob));
+        struct aoiMeasurementElement newElement;
+        newElement.sequence = tx_pkt.seqNum;
+        newElement.arrival = d_seq_timeslot;
+        newElement.sent = 0;
+        newElement.answer = 0;
+        aoiValues[tx_pkt.seqNum] = newElement;
+        app_to_mac[tx_pkt.seqNum] = mac_wait_start / tpus;
 
         // TODO If method .. add to queue or send directly
-        addToQueue(d_msg, d_msg_len, seq);
-        if(seq == 9999) {
+        addToQueue(d_msg, d_msg_len, tx_pkt.seqNum);
+        if(tx_pkt.seqNum == 9999) {
             d_last_pack_recieved = gr::high_res_timer_now();
         }
         // printf("queue size = %ld, msg_len = %d\n", queue.size(), d_msg_len);
@@ -346,14 +388,14 @@ public:
 
 // Private Attributes
 private:
-    
+
     bool        d_debug;
     int         d_msg_len;
     uint16_t    d_fcf;
     uint8_t     d_seq_nr;
     uint16_t    d_dst_pan;
     uint16_t    d_dst;
-    uint16_t    d_src;
+    uint16_t    mSrcAddr;
     char        d_msg[256];
     char        response[20];
     // picking 10 as the array size
@@ -430,6 +472,7 @@ private:
         tmpfile.close();
     }
 
+    // TODO change to pkt type
     void addToQueue(char *pck, int len, uint32_t seq_no) {
         struct queueElement newElement;
         newElement.len = len;
@@ -439,7 +482,6 @@ private:
         for (i = 0; i < len; i++)
             newElement.data[i] = pck[i];
 
-        // TODO Method enum
         if((mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) & !queue.empty()) {
             while(!queue.empty()) {
                 queue.erase(queue.begin());
@@ -449,8 +491,10 @@ private:
             // RANDOM ACCESS - No Wait
             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                              pmt::make_blob(newElement.data, newElement.len)));
-            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                             pmt::make_blob("1", 1)));
+            if (SEND_SINGLE_BYTE) {
+                message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                                 pmt::make_blob("1", 1)));
+            }
         } else if (queue.size() < d_queue_size) {
             // There is space in the TX queue
             queue.push_back(newElement);
@@ -463,6 +507,40 @@ private:
             queue.push_back(newElement);
         }
     }
+    
+//         void addToQueue(const PlantToControllerPacket& p) {
+//         struct queueElementTyped newElement;
+//         newElement.len = sizeof(PlantToControllerPacket);
+//         newElement.seq = p.seqNum;
+//         newElement.remainingRetransmissionAttempts = d_retransmission_attempt;
+//         int i;
+//          std::memcpy(newElement.tx_pkt, &p, sizeof(PlantToControllerPacket));
+// 
+//         if((mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) & !queue.empty()) {
+//             while(!queue.empty()) {
+//                 queue.erase(queue.begin());
+//             }
+//             queue.push_back(newElement);
+//         } else if (mQueuingStrategy == QueuingStrategies::No_Queue) {
+//             // RANDOM ACCESS - No Wait
+//             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+//                              pmt::make_blob(newElement.data, newElement.len)));
+//             if (SEND_SINGLE_BYTE) {
+//                 message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+//                                  pmt::make_blob("1", 1)));
+//             }
+//         } else if (queue.size() < d_queue_size) {
+//             // There is space in the TX queue
+//             queue.push_back(newElement);
+//         } else if (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop || mQueuingStrategy == QueuingStrategies::TOD_FrontDrop) {
+//             // Front drop
+//             while(queue.size() >= d_queue_size) {
+//                 queue.erase(queue.begin());
+//             }
+//             // TODO QUEUE implementation (no vector)
+//             queue.push_back(newElement);
+//         }
+//     }
 
     uint32_t findAndRemoveFromQueue(uint8_t seq) {
 
@@ -479,38 +557,81 @@ private:
         }
         return 0;
     }
-    
-        void generateMacPlant(const char *buf, int len) {
+
+    PlantToControllerPacket generateMacPlant(const char *data, int len) {
+        
+        PlantToControllerPacket tx_pkt;
+        
+        
 
         // FCF
         // data frame, no security
-        d_msg[0] = d_fcf & 0xFF;
+        uint16_t fcf;
+
         if((mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
-            d_msg[0] = d_msg[0] | 0x20;
+            d_msg[0] = (d_fcf & 0xFF) | 0x20;
+            tx_pkt.frameControlField = d_fcf;
         }
-        //printf("%c", d_msg[0]);
+        else {
+            d_msg[0] = d_fcf & 0xFF;
+        }
+        
+        tx_pkt.frameControlField = d_fcf;
+        for (int i = 0; i < 16; i++)
+            printf("%d ", (d_fcf & (0x0001 << i)) >> i);
+        
+        printf("\n");
+        
+        for (int i = 0; i < 16; i++)
+            printf("%d ", (tx_pkt.frameControlField & (0x0001 << i)) >> i);
+        
+        printf("\n");
+        //printf("%02x %02x\n", (tx_pkt.frameControlField >> 8) & 0xff, tx_pkt.frameControlField & 0xff);
+        
+
         d_msg[1] = (d_fcf >> 8) & 0xFF;
+        
+        for (int i = 0; i < 8; i++)
+            printf("%d ", (d_msg[0] & (0x0001 << i)) >> i);
+        
+        for (int i = 0; i < 8; i++)
+            printf("%d ", (d_msg[1] & (0x0001 << i)) >> i);
+        
+        printf("\n");
+        //printf("%02x %02x\n", d_msg[0] & 0xff, d_msg[1] & 0xff);
+        
 
         // seq nr
         d_msg[2] = d_seq_nr++;
+        tx_pkt.MACSeqNum = d_seq_nr++;
 
         // addr info
         d_msg[3] = d_dst_pan & 0xFF;
         d_msg[4] = (d_dst_pan >> 8) & 0xFF;
+        tx_pkt.dstPANaddr = d_dst_pan; // TODO check
         d_msg[5] = d_dst & 0xFF;
         d_msg[6] = (d_dst >> 8) & 0xFF;
-        d_msg[7] = d_src & 0xFF;
-        d_msg[8] = (d_src >> 8) & 0xFF;
+        tx_pkt.dstAddr = d_dst;
+        d_msg[7] = mSrcAddr & 0xFF;
+        d_msg[8] = (mSrcAddr >> 8) & 0xFF;
+        tx_pkt.srcAddr = mSrcAddr;
 
-        std::memcpy(d_msg + 9, buf, len);
+        std::memcpy(d_msg + 9, data, len);
+        std::memcpy(&(tx_pkt.RIMEHeader),
+                    data,
+                    sizeof(tx_pkt.RIMEHeader) + sizeof(tx_pkt.loopID) + sizeof(tx_pkt.seqNum) + sizeof(*(tx_pkt.state) * STATE_VECTOR_LEN));
 
         uint16_t crc = crc16(d_msg, len + 9);
 
         d_msg[ 9 + len] = crc & 0xFF;
         d_msg[10 + len] = crc >> 8;
+        tx_pkt.crc = crc;
 
         d_msg_len = 9 + len + 2;
+        // TODO not needed!
+        return tx_pkt;
     }
+    
 
 };
 
