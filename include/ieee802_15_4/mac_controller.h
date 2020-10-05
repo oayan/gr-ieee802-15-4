@@ -44,7 +44,9 @@ public:
           int dst_pan=0x1aaa,
           int dst=0xffff,
           int src=0x3344,
-          int ts_dur_ms = 10 ); // TODO Save Stats
+          int ts_dur_ms=10,
+          int slot_len=20,
+          bool beacon_eanble=true ); // TODO Save Stats
 };
 
 }  // namespace ieee802_11

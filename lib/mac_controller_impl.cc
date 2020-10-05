@@ -45,7 +45,7 @@ public:
 
 #define dout d_debug && std::cout
 
-    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms) :
+    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms, int slot_len, bool beacon_enable) :
         block ("mac_controller",
                gr::io_signature::make(0, 0, 0),
                gr::io_signature::make(0, 0, 0)),
@@ -57,9 +57,14 @@ public:
         d_dst(dst),
         d_src(src),
         d_save_stats(0),
+        d_beacon_enable(beacon_enable),
+        d_timeslot_dur_ms(ts_dur_ms),
         d_timeslot_dur((gr::high_res_timer_tps() / 1000) * ts_dur_ms),
+        d_slot_len(slot_len),
         d_num_packet_errors(0),
         d_num_packets_received(0) {
+
+        beacon_init(d_beacon_enable);
 
         message_port_register_in(pmt::mp("app in"));
         set_msg_handler(pmt::mp("app in"), boost::bind(&mac_controller_impl::app_controller_in, this, _1));
@@ -133,8 +138,8 @@ public:
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob(d_msg, d_msg_len)));
                         // TODO This should be redundant in radio !!!!!!!!!!!!!
-                        message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                                         pmt::make_blob("1", 1)));
+                        // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                        //                  pmt::make_blob("1", 1)));
                         // TODO: remove if not necessary !!!!!!!!!!!!!!!!!!!
                         // TODO save stats
                         if(d_cnt_timeslot - d_last_received_ts_num > 750 & d_last_received_ts_num != 0) {
@@ -220,8 +225,8 @@ public:
                 message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                  pmt::make_blob(d_msg, d_msg_len)));
                 // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
-                message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                                 pmt::make_blob("1", 1)));
+                // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                //                  pmt::make_blob("1", 1)));
             }
         }
         // Drops MAC Header & Footer and forwards the data up to Rime Stack
@@ -259,14 +264,7 @@ public:
         if (buf[4] == 0xaa) {
             is_schedule = 1;
         }
-        // unsigned char buf[256];
-        // std::memcpy(buf, pmt::blob_data(tmp), data_len);
-        // for(int i = 0; i < data_len; i++) {
-        //  dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)buf[i] & 0xFF) << std::dec << " ";
-        //  if(i % 16 == 15) {
-        //  dout << std::endl;
-        //   }
-        // }
+
 
         if(pmt::is_eof_object(msg)) {
             dout << "MAC: exiting" << std::endl;
@@ -286,19 +284,19 @@ public:
                 schedule information message of application */
         if(is_schedule == 1) {
             // TODO struct for schedulePacketFormat
-            d_beacon_len = buf[5] + 8;
+            // d_beacon_len = buf[5] + 8;
             //uint16_t dur = (buf[6] | buf[7] << 8) * (buf[5] + 1);
-            d_slot_len = buf[5] + 1;
-            d_timeslot_dur = (gr::high_res_timer_tps() / 1000) * (buf[6] | buf[7] << 8);
-            d_slotframe_dur = d_timeslot_dur * d_slot_len;
-            for(i = 0; i < d_beacon_len; i++) {
-                d_beacon[i] = buf[4 + i];
-            }
-            d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
-            d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
-            d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
-            d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
-            d_tnow = gr::high_res_timer_now();
+            //d_slot_len = buf[5] + 1;
+            //d_timeslot_dur = (gr::high_res_timer_tps() / 1000) * (buf[6] | buf[7] << 8);
+            // d_slotframe_dur = d_timeslot_dur * d_slot_len;
+            // for(i = 0; i < d_beacon_len; i++) {
+            //     d_beacon[i] = buf[4 + i];
+            // }
+            // d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
+            // d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
+            // d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
+            // d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
+            // d_tnow = gr::high_res_timer_now();
         }
 
         /*  if it is a control application packet, identify the plant number (provided by application)
@@ -310,12 +308,20 @@ public:
             //  buf[i-4] = buf[i];
             // }
             generate_mac_scheduler(buf, (data_len), dest_addr);
+            //          //unsigned char buf[256];
+            //  //std::memcpy(buf, pmt::blob_data(tmp), d_msg_len);
+            //  for(int i = 0; i < d_msg_len; i++) {
+            //   dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
+            //   if(i % 16 == 15) {
+            //   dout << std::endl;
+            //    }
+            // }
             //print_message();
             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                              pmt::make_blob(d_msg, d_msg_len)));
             //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
-            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                        pmt::make_blob("1", 1)));
+            // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+            //             pmt::make_blob("1", 1)));
         }
     }
 
@@ -434,6 +440,33 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
+    void beacon_init(bool beacon) {
+      if(beacon){
+        d_beacon_len = d_slot_len + 8;
+        d_slotframe_dur = d_timeslot_dur * d_slot_len;
+        int i = 0;
+        for(i = 0; i < d_beacon_len; i++) {
+          d_beacon[i] = 1;
+        }
+        d_beacon[0] = d_slot_len;
+        d_beacon[1] = d_timeslot_dur_ms & 0xff;
+        d_beacon[2] = (d_timeslot_dur_ms >> 8) & 0xff;
+        d_beacon[3] = 0x00;
+        d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
+        d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
+        d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
+        d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
+        d_tnow = gr::high_res_timer_now();  
+        printf("beacon init\n");
+        for(i = 0; i < d_beacon_len; i++) {
+          dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_beacon[i] & 0xFF) << std::dec << " ";
+          if(i % 16 == 15) {
+            dout << std::endl;
+          }
+        }
+      }
+    }
+
     void print_message() {
         for(int i = 0; i < d_msg_len; i++) {
             dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
@@ -470,7 +503,9 @@ private:
     uint16_t    d_save_stats;
     char        d_msg[256];
 
+    bool        d_beacon_enable;
     gr::high_res_timer_type d_tnow;     // to save the start time of current timeslot
+    long long int    d_timeslot_dur_ms;
     long long int    d_timeslot_dur = 0;  // this value is taken from application duration of timeslot (ms)
     uint8_t     d_slot_len;         // this value is taken from application number of timeslots in a superframe
     // this value is taken from application duration of superframe (d_timeslot_dur x d_slot_len)
@@ -493,6 +528,6 @@ private:
 };
 
 mac_controller::sptr
-mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms) {
-    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,dst,src,ts_dur_ms));
+mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms, int slot_len, bool beacon_enable) {
+    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,dst,src,ts_dur_ms,slot_len,beacon_enable));
 }
