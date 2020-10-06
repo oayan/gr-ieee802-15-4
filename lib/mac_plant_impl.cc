@@ -128,8 +128,7 @@ public:
                         queueValues.push_back(newMeasure);
                     }
                     
-
-                    // TODO Comment
+                    // Check if the current slot is allocated to me (the corresponding bit should already be set to '1' upon a beacon reception)
                     if(d_current_slotframe & (0x1 << d_current_position) && !queue.empty()) {
                         struct queueElement newElement;
                         rtt_start = gr::high_res_timer_now();
