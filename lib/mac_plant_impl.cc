@@ -31,6 +31,7 @@
 #define MIN_PKT_LEN 11
 #define BROADCAST_ADDR 0xFFFF
 #define SEND_SINGLE_BYTE false
+#define BITS_IN_BYTE 8
 
 using namespace gr::ieee802_15_4;
 
@@ -116,6 +117,8 @@ public:
 
                 // TODO Slot Dur <--> Method type
                 if(gr::high_res_timer_now() - d_tnow > d_slot_dur && d_slot_dur != 0) {
+                    d_tnow = gr::high_res_timer_now();
+                    d_current_position = (d_current_position + 1) % d_num_timeslot_per_superframe;
                     d_seq_timeslot++;
                     if(queue.size() != d_old_queue_size) {
                         d_old_queue_size = queue.size();
@@ -124,10 +127,10 @@ public:
                         newMeasure.timeslot_seq = d_seq_timeslot;
                         queueValues.push_back(newMeasure);
                     }
-                    d_tnow = gr::high_res_timer_now();
+                    
 
                     // TODO Comment
-                    if(d_current_slotframe & (0x1 << 31) && !queue.empty()) {
+                    if(d_current_slotframe & (0x1 << d_current_position) && !queue.empty()) {
                         struct queueElement newElement;
                         rtt_start = gr::high_res_timer_now();
                         newElement = queue[0];
@@ -157,8 +160,8 @@ public:
                         saveStats();
                         printf("end of plant\n");
                     }
-                    d_current_slotframe = d_current_slotframe << 1 | ( 0x1 & (d_slotframe >> (d_num_timeslot_per_superframe - d_last_position)));
-                    d_last_position = (d_last_position + 1) % d_num_timeslot_per_superframe;
+//                     d_current_slotframe = d_current_slotframe << 1 | ( 0x1 & (d_slotframe >> (d_num_timeslot_per_superframe - d_last_position)));
+                    
                 }
             }
 
@@ -214,6 +217,7 @@ public:
         }
 
         if(protocol::isBeacon(rx_pkt->frameControlField)) {
+            d_tnow = gr::high_res_timer_now();
             extract_beacon_info((BeaconPacket*) rx_pkt);
             return;
         } else if(protocol::isACK(rx_pkt->frameControlField) && (dest == mSrcAddr)) {
@@ -355,7 +359,7 @@ private:
     uint32_t    d_seq_timeslot = 0;
     uint32_t    d_current_slotframe = 0;
     uint32_t    d_slotframe = 0;
-    uint8_t     d_last_position;
+    uint8_t     d_current_position;
     uint8_t     d_num_timeslot_per_superframe;
     uint8_t		d_retransmission_attempt = 2;
     uint16_t    d_old_queue_size = 0;
@@ -469,25 +473,31 @@ private:
     }
 
     void extract_beacon_info(BeaconPacket* beacon_packet) {
+        
+        assert(d_num_timeslot_per_superframe < (sizeof(d_current_slotframe) * BITS_IN_BYTE));
+        
         uint16_t dur = beacon_packet->timeslotDur;
         d_num_timeslot_per_superframe = beacon_packet->numTimeslotPerSuperframe;
+        assert(d_num_timeslot_per_superframe != 0);                // This method should not be called if this is the case
         int i = 0;
         // d_current_slotframe contains flags about the ownership of next 32 timeslots (every one bit of uint32_t indicates ownership of one timeslot)
         // transmission of a packet is allowed, if the flag is 1. 
         // It may contain more timeslot than superframe in order to continiue transmitting even if the beacon is lost.
         // d_slotframe contains flags belong to one superframe. d_last_position contains the number of the last timeslot represented by d_current_slotframe.
         // d_slotframe and d_last_position are used to recalculate ownership of the next 32 timeslot at the end of every timeslot. 
-        for (i = 0; i < 32; i++) {
-            d_current_slotframe = d_current_slotframe << 1;
-            if(beacon_packet->schedule[(i % d_num_timeslot_per_superframe)] == d_schedule && (i % d_num_timeslot_per_superframe != 0)) {
-                d_current_slotframe = 0x01 | d_current_slotframe;
+        
+        d_current_slotframe = 0;               // Placeholder of the next 32 slots' schedule to extract into 
+        for (i = 0; i < d_num_timeslot_per_superframe; i++) {
+//             d_current_slotframe = d_current_slotframe << 1;
+            if(beacon_packet->schedule[i] == d_schedule) {
+                d_current_slotframe = (0x00000001 << i) | d_current_slotframe;
             }
         }
-        d_last_position = i % d_num_timeslot_per_superframe;
-        d_slotframe = d_current_slotframe >> (31 - d_num_timeslot_per_superframe);
+//         d_last_position = (sizeof(d_current_slotframe) * BITS_IN_BYTE) % d_num_timeslot_per_superframe;
+        d_current_position = 0;
+//         d_slotframe = d_current_slotframe >> (31 - d_num_timeslot_per_superframe);
         d_seq_timeslot = beacon_packet->timeslotNum;
         d_slot_dur = (gr::high_res_timer_tps() / 1000) * dur;
-        d_tnow = gr::high_res_timer_now();
     }
 
     /*!
