@@ -20,6 +20,7 @@
 #include <gnuradio/io_signature.h>
 #include <gnuradio/block_detail.h>
 #include <gnuradio/high_res_timer.h>
+#include <ieee802_15_4/protocol.h>
 
 #include <iostream>
 #include <iomanip>
@@ -123,20 +124,16 @@ public:
                 }
                 // check for the beginning of the timeslot
                 if(gr::high_res_timer_now() - d_tnow > d_timeslot_dur && d_slotframe_dur != 0) {
-                    // TODO d_slotframe_dur should be selected by grc, not APP layer
                     d_tnow = gr::high_res_timer_now();
                     // check for the beacon timeslot
                     if(d_cnt_timeslot % d_slot_len == 0) {
                         // add sequence number of the current timeslot to the beacon
                         // so plants can synchronize their timeslots for measurements
-                        d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
-                        d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
-                        d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
-                        d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
-                        generate_beacon_ack_mac(d_beacon, d_beacon_len, 0xffff);  //add mac header and footer
+                        d_beacon_str.timeslotNum = d_cnt_timeslot;
+                        generate_mac_beacon();  //add mac header and footer
                         // send packet
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                                         pmt::make_blob(d_msg, d_msg_len)));
+                                         pmt::make_blob((char*)(&d_beacon_str), sizeof(d_beacon_str))));
                         // TODO This should be redundant in radio !!!!!!!!!!!!!
                         // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                         //                  pmt::make_blob("1", 1)));
@@ -279,25 +276,6 @@ public:
             return;
         }
 
-        /*  schedule packets contain information about number of time slots in a superframe,
-                duration of a timeslot, structure of timeslot this part gets this informations from
-                schedule information message of application */
-        if(is_schedule == 1) {
-            // TODO struct for schedulePacketFormat
-            // d_beacon_len = buf[5] + 8;
-            //uint16_t dur = (buf[6] | buf[7] << 8) * (buf[5] + 1);
-            //d_slot_len = buf[5] + 1;
-            //d_timeslot_dur = (gr::high_res_timer_tps() / 1000) * (buf[6] | buf[7] << 8);
-            // d_slotframe_dur = d_timeslot_dur * d_slot_len;
-            // for(i = 0; i < d_beacon_len; i++) {
-            //     d_beacon[i] = buf[4 + i];
-            // }
-            // d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
-            // d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
-            // d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
-            // d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
-            // d_tnow = gr::high_res_timer_now();
-        }
 
         /*  if it is a control application packet, identify the plant number (provided by application)
                 as destination address and sent. Receiver MAC checks the destination address */
@@ -440,30 +418,33 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
+    void generate_mac_beacon() {
+
+        // FCF
+        // data frame, no security
+        d_beacon_str.frameControlField = d_fcf_beacon;
+        d_beacon_str.MACSeqNum = d_seq_nr++;
+        d_beacon_str.dstPANaddr = d_dst_pan;
+        d_beacon_str.dstAddr = d_dst;
+        d_beacon_str.srcAddr = d_src;
+
+        uint16_t crc = crc16((char*)(&d_beacon_str), (sizeof(d_beacon_str) - sizeof(d_beacon_str.crc)));
+        d_beacon_str.crc = crc;
+    }
+
     void beacon_init(bool beacon) {
       if(beacon){
-        d_beacon_len = d_slot_len + 8;
+        int i;
         d_slotframe_dur = d_timeslot_dur * d_slot_len;
-        int i = 0;
-        for(i = 0; i < d_beacon_len; i++) {
-          d_beacon[i] = 1;
+        d_beacon_str.slotLen = d_slot_len;
+        d_beacon_str.timeslotDur = d_timeslot_dur_ms;
+        d_beacon_str.schedule[0] = 0x00;
+        for(i = 0; i < d_slot_len; i++){
+          d_beacon_str.schedule[i + 1] = 0x01;
         }
-        d_beacon[0] = d_slot_len;
-        d_beacon[1] = d_timeslot_dur_ms & 0xff;
-        d_beacon[2] = (d_timeslot_dur_ms >> 8) & 0xff;
-        d_beacon[3] = 0x00;
-        d_beacon[d_beacon_len - 4] = d_cnt_timeslot >> 24 & 0xff;
-        d_beacon[d_beacon_len - 3] = d_cnt_timeslot >> 16 & 0xff;
-        d_beacon[d_beacon_len - 2] = d_cnt_timeslot >> 8 & 0xff;
-        d_beacon[d_beacon_len - 1] = d_cnt_timeslot & 0xff;
+        d_beacon_str.timeslotNum = d_cnt_timeslot;
         d_tnow = gr::high_res_timer_now();  
         printf("beacon init\n");
-        for(i = 0; i < d_beacon_len; i++) {
-          dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_beacon[i] & 0xFF) << std::dec << " ";
-          if(i % 16 == 15) {
-            dout << std::endl;
-          }
-        }
       }
     }
 
@@ -511,9 +492,8 @@ private:
     // this value is taken from application duration of superframe (d_timeslot_dur x d_slot_len)
     long long int    d_slotframe_dur = 0;
     long long int    d_last_recieved = 0; // stores the reception time of latest received packet
-    char      d_beacon[50];       // place to save the beacon packet (the structure received one time from application)
-    uint8_t   d_beacon_len = 0;     // this value is taken from application length of beacon depends on d_slot_len
-
+    BeaconPacket     d_beacon_str;
+    
     uint32_t  d_cnt_timeslot = 0;     // this value used to understand own timeslot (beacon)
     std::vector<measurementElement> measurement;
     uint32_t  d_last_received_ts_num = 0;
