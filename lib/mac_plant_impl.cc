@@ -487,14 +487,11 @@ private:
         
         d_current_slotframe = 0;               // Placeholder of the next 32 slots' schedule to extract into 
         for (i = 0; i < d_num_timeslot_per_superframe; i++) {
-//             d_current_slotframe = d_current_slotframe << 1;
             if(beacon_packet->schedule[i] == d_schedule) {
                 d_current_slotframe = (0x00000001 << i) | d_current_slotframe;
             }
         }
-//         d_last_position = (sizeof(d_current_slotframe) * BITS_IN_BYTE) % d_num_timeslot_per_superframe;
         d_current_position = 0;
-//         d_slotframe = d_current_slotframe >> (31 - d_num_timeslot_per_superframe);
         d_seq_timeslot = beacon_packet->timeslotNum;
         d_slot_dur = (gr::high_res_timer_tps() / 1000) * dur;
     }
