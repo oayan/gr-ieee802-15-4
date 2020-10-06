@@ -185,6 +185,8 @@ public:
         }
 
         size_t data_len = pmt::blob_length(blob);
+        PlantToControllerPacket* rx_pkt = (PlantToControllerPacket*)pmt::blob_data(blob);
+
         if(data_len < 11) {
             // dout << "MAC: frame too short. Dropping!" << std::endl;
             return;
@@ -213,11 +215,12 @@ public:
 
             // send ACK if ACK-enabled
             // TODO Standard struct
-            if(buf[0] & 0x20) {
+            if(protocol::getAckEnable(rx_pkt->frameControlField)) {
+              generateAndSendAck(rx_pkt)
                 char mac_seq[1];
                 // Generation of the ACK message with the RX source address as TX destination address
                 mac_seq[0] = buf[2];              // save mac sequence number to send in ACK
-                uint16_t dest = (buf[8] << 8) | buf[7];     // originator of the packet is destination of ACK
+                uint16_t dest = rx_pkt->srcAddr;     // originator of the packet is destination of ACK
                 generate_beacon_ack_mac(mac_seq, 1, dest);
                 message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                  pmt::make_blob(d_msg, d_msg_len)));
@@ -258,9 +261,6 @@ public:
         std::memcpy(buf, pmt::blob_data(tmp), data_len);
         int i = 0;
         // TODO 0xaa define 0xaa above
-        if (buf[4] == 0xaa) {
-            is_schedule = 1;
-        }
 
 
         if(pmt::is_eof_object(msg)) {
@@ -277,30 +277,30 @@ public:
         }
 
 
-        /*  if it is a control application packet, identify the plant number (provided by application)
-                as destination address and sent. Receiver MAC checks the destination address */
-        if(is_schedule == 0) {
-            // TODO controllerToPlantPacketFormat
-            uint16_t dest_addr = buf[4] | (buf[5] << 8);
-            // for(i = 8; i < data_len; i++){
-            //  buf[i-4] = buf[i];
-            // }
-            generate_mac_scheduler(buf, (data_len), dest_addr);
-            //          //unsigned char buf[256];
-            //  //std::memcpy(buf, pmt::blob_data(tmp), d_msg_len);
-            //  for(int i = 0; i < d_msg_len; i++) {
-            //   dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
-            //   if(i % 16 == 15) {
-            //   dout << std::endl;
-            //    }
-            // }
-            //print_message();
-            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                             pmt::make_blob(d_msg, d_msg_len)));
-            //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
-            // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-            //             pmt::make_blob("1", 1)));
-        }
+    /*  if it is a control application packet, identify the plant number (provided by application)
+            as destination address and sent. Receiver MAC checks the destination address */
+
+        // TODO controllerToPlantPacketFormat
+        uint16_t dest_addr = buf[4] | (buf[5] << 8);
+        // for(i = 8; i < data_len; i++){
+        //  buf[i-4] = buf[i];
+        // }
+        generate_mac_scheduler(buf, (data_len), dest_addr);
+        //          //unsigned char buf[256];
+        //  //std::memcpy(buf, pmt::blob_data(tmp), d_msg_len);
+        //  for(int i = 0; i < d_msg_len; i++) {
+        //   dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
+        //   if(i % 16 == 15) {
+        //   dout << std::endl;
+        //    }
+        // }
+        //print_message();
+        message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                         pmt::make_blob(d_msg, d_msg_len)));
+        //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
+        // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+        //             pmt::make_blob("1", 1)));
+
     }
 
     uint16_t crc16(char *buf, int len) {
@@ -418,6 +418,10 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
+    void generateAndSendAck(PlantToControllerPacket* beacon_packet) {
+      
+    }
+
     void generate_mac_beacon() {
 
         // FCF
@@ -436,7 +440,7 @@ public:
       if(beacon){
         int i;
         d_slotframe_dur = d_timeslot_dur * d_slot_len;
-        d_beacon_str.slotLen = d_slot_len;
+        d_beacon_str.numTimeslotPerSuperframe = d_slot_len;
         d_beacon_str.timeslotDur = d_timeslot_dur_ms;
         d_beacon_str.schedule[0] = 0x00;
         for(i = 0; i < d_slot_len; i++){

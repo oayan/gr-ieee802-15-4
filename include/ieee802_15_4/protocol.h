@@ -27,6 +27,7 @@
 #define STATE_VECTOR_LEN 4
 #define CONTROL_INPUT_LEN 1
 #define MASK_FRAME_TYPE 0x0007
+#define MASK_ACK_ENABLE 0x0020
 
 namespace gr {
 namespace ieee802_15_4 {
@@ -65,10 +66,20 @@ struct BeaconPacket {
     uint16_t dstPANaddr;
     uint16_t dstAddr;
     uint16_t srcAddr;
-    uint8_t slotLen;
+    uint8_t numTimeslotPerSuperframe;
     uint16_t timeslotDur;
     uint8_t schedule[31];
     uint32_t timeslotNum;
+    uint16_t crc;
+};
+
+struct AckPacket {
+    uint16_t frameControlField;
+    uint8_t MACSeqNum;
+    uint16_t dstPANaddr;
+    uint16_t dstAddr;
+    uint16_t srcAddr;
+    uint8_t ackSeq;
     uint16_t crc;
 };
 
@@ -94,6 +105,14 @@ public:
 
     static MACFrameType getFrameType(const uint16_t& fcf) {
         return (MACFrameType) (fcf & MASK_FRAME_TYPE);
+    }
+
+    static bool getAckEnable(const uint16_t& fcf) {
+    	if(fcf & MASK_ACK_ENABLE){
+        	return true;
+    	} else {
+    		return false;
+    	}
     }
 
     static bool isBeacon(const uint16_t& fcf) {
