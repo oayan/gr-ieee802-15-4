@@ -59,7 +59,18 @@ float control_input[CONTROL_INPUT_LEN];
 uint16_t crc;
 };
 
-
+struct BeaconPacket {
+uint16_t frameControlField;
+uint8_t MACSeqNum;
+uint16_t dstPANaddr;
+uint16_t dstAddr;
+uint16_t srcAddr;
+uint8_t slotLen;
+uint16_t timeslotDur;
+uint8_t schedule[31];
+uint32_t timeslotNum;
+uint16_t crc;
+};
 
 #pragma pack(pop)
 
