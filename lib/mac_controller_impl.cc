@@ -216,17 +216,7 @@ public:
             // send ACK if ACK-enabled
             // TODO Standard struct
             if(protocol::getAckEnable(rx_pkt->frameControlField)) {
-              generateAndSendAck(rx_pkt)
-                char mac_seq[1];
-                // Generation of the ACK message with the RX source address as TX destination address
-                mac_seq[0] = buf[2];              // save mac sequence number to send in ACK
-                uint16_t dest = rx_pkt->srcAddr;     // originator of the packet is destination of ACK
-                generate_beacon_ack_mac(mac_seq, 1, dest);
-                message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                                 pmt::make_blob(d_msg, d_msg_len)));
-                // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
-                // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                //                  pmt::make_blob("1", 1)));
+              generateAndSendAck(rx_pkt);
             }
         }
         // Drops MAC Header & Footer and forwards the data up to Rime Stack
@@ -418,8 +408,21 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
-    void generateAndSendAck(PlantToControllerPacket* beacon_packet) {
-      
+    void generateAndSendAck(PlantToControllerPacket* recieved_packet) {
+      AckPacket ack_packet;
+      ack_packet.frameControlField = d_fcf_ack;
+      ack_packet.MACSeqNum = d_seq_nr++;
+      ack_packet.dstPANaddr = d_dst_pan;
+      ack_packet.dstAddr = recieved_packet->srcAddr;
+      ack_packet.src = d_src;
+      ack_packet.ackSeq = recieved_packet->MACSeqNum;
+      uint16_t crc = crc16((char*)(&ack_packet), (sizeof(ack_packet) - sizeof(ack_packet.crc)));
+      ack_packet.crc = crc;
+      message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                        pmt::make_blob((char*)(&ack_packet), sizeof(ack_packet))));
+      // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
+      // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+      //                  pmt::make_blob("1", 1)));
     }
 
     void generate_mac_beacon() {
@@ -442,10 +445,10 @@ public:
         d_slotframe_dur = d_timeslot_dur * d_slot_len;
         d_beacon_str.numTimeslotPerSuperframe = d_slot_len;
         d_beacon_str.timeslotDur = d_timeslot_dur_ms;
-        d_beacon_str.schedule[0] = 0x00;
         for(i = 0; i < d_slot_len; i++){
-          d_beacon_str.schedule[i + 1] = 0x01;
+          d_beacon_str.schedule[i] = 0x01;
         }
+        d_beacon_str.schedule[0] = 0x00;
         d_beacon_str.timeslotNum = d_cnt_timeslot;
         d_tnow = gr::high_res_timer_now();  
         printf("beacon init\n");
