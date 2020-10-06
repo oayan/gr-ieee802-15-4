@@ -34,51 +34,51 @@ namespace ieee802_15_4 {
 #pragma pack(push, 1)
 
 struct PlantToControllerPacket {
-uint16_t frameControlField;
-uint8_t MACSeqNum;
-uint16_t dstPANaddr;
-uint16_t dstAddr;
-uint16_t srcAddr;
-char RIMEHeader[4];
-uint32_t loopID;
-uint32_t seqNum;
-float state[STATE_VECTOR_LEN];
-uint16_t crc;
+    uint16_t frameControlField;
+    uint8_t MACSeqNum;
+    uint16_t dstPANaddr;
+    uint16_t dstAddr;
+    uint16_t srcAddr;
+    char RIMEHeader[4];
+    uint32_t loopID;
+    uint32_t seqNum;
+    float state[STATE_VECTOR_LEN];
+    uint16_t crc;
 };
 
 struct ControllerToPlantPacket {
-uint16_t frameControlField;
-uint8_t MACSeqNum;
-uint16_t dstPANaddr;
-uint16_t dstAddr;
-uint16_t srcAddr;
-char RIMEHeader[4];
-uint32_t loopID;
-uint32_t seqNum;
-float control_input[CONTROL_INPUT_LEN];
-uint16_t crc;
+    uint16_t frameControlField;
+    uint8_t MACSeqNum;
+    uint16_t dstPANaddr;
+    uint16_t dstAddr;
+    uint16_t srcAddr;
+    char RIMEHeader[4];
+    uint32_t loopID;
+    uint32_t seqNum;
+    float control_input[CONTROL_INPUT_LEN];
+    uint16_t crc;
 };
 
 struct BeaconPacket {
-uint16_t frameControlField;
-uint8_t MACSeqNum;
-uint16_t dstPANaddr;
-uint16_t dstAddr;
-uint16_t srcAddr;
-uint8_t slotLen;
-uint16_t timeslotDur;
-uint8_t schedule[31];
-uint32_t timeslotNum;
-uint16_t crc;
+    uint16_t frameControlField;
+    uint8_t MACSeqNum;
+    uint16_t dstPANaddr;
+    uint16_t dstAddr;
+    uint16_t srcAddr;
+    uint8_t slotLen;
+    uint16_t timeslotDur;
+    uint8_t schedule[31];
+    uint32_t timeslotNum;
+    uint16_t crc;
 };
 
 #pragma pack(pop)
 
 enum MACFrameType {
-        Beacon = 0,
-        Data = 1,
-        Ack = 2,
-        MACCommand = 3
+    Beacon = 0,
+    Data = 1,
+    Ack = 2,
+    MACCommand = 3
 };
 
 /*!
@@ -91,14 +91,27 @@ public:
 
     protocol();
     ~protocol();
-    
-    static MACFrameType getFrameType(const uint16_t& fcf) { return (MACFrameType) (fcf & MASK_FRAME_TYPE); }
-    
-    static bool isBeacon(const uint16_t& fcf) { return getFrameType(fcf) == MACFrameType::Beacon; }
-    
-    static bool isACK(const uint16_t& fcf) { return getFrameType(fcf) == MACFrameType::Ack; }
 
-    
+    static MACFrameType getFrameType(const uint16_t& fcf) {
+        return (MACFrameType) (fcf & MASK_FRAME_TYPE);
+    }
+
+    static bool isBeacon(const uint16_t& fcf) {
+        return getFrameType(fcf) == MACFrameType::Beacon;
+    }
+
+    static bool isACK(const uint16_t& fcf) {
+        return getFrameType(fcf) == MACFrameType::Ack;
+    }
+
+    static void printUint16LSBtoMSB(const uint16_t& u) {
+        for (int i = 0; i < 16; i++)
+            printf("%d ", (u & (0x0001 << i)) >> i);
+
+        printf("\n");
+    }
+
+
 private:
 };
 
