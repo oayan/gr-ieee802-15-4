@@ -207,16 +207,14 @@ public:
 
             struct measurementElement newElement;
             // TODO packetToControllerFormat as struct
-            newElement.controller_num = buf[17] & 0xff;
-            newElement.sequence = (buf[16] << 24) | (buf[15] << 16) | (buf[14] << 8) | buf[13];
+            newElement.controller_num = rx_pkt->loopID;
+            newElement.sequence = rx_pkt->seqNum;
             newElement.arrival = d_cnt_timeslot;
             measurement.push_back(newElement);
 
-
             // send ACK if ACK-enabled
-            // TODO Standard struct
             if(protocol::getAckEnable(rx_pkt->frameControlField)) {
-              generateAndSendAck(rx_pkt);
+              generate_send_ack(rx_pkt);
             }
         }
         // Drops MAC Header & Footer and forwards the data up to Rime Stack
@@ -284,7 +282,6 @@ public:
         //   dout << std::endl;
         //    }
         // }
-        //print_message();
         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                          pmt::make_blob(d_msg, d_msg_len)));
         //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
@@ -341,74 +338,7 @@ public:
         d_msg_len = 9 + len + 2;
     }
 
-
-    // this part generates the mac header and footer of beacon and ack packets
-    void generate_beacon_ack_mac(const char *buf, int len, uint16_t addr) {
-
-        // FCF
-        // data frame, no security
-        // fcf of beacon and ack packets depending on IEEE 802.15.4 standard
-        if(len > 1) {
-            d_msg[0] = d_fcf_beacon & 0xFF;
-            d_msg[1] = (d_fcf_beacon >> 8) & 0xFF;
-        } else {
-            d_msg[0] = d_fcf_ack & 0xFF;
-            d_msg[1] = (d_fcf_ack >> 8) & 0xFF;
-        }
-
-
-        // seq nr
-        d_msg[2] = d_seq_nr++;
-
-        // addr info
-        d_msg[3] = d_dst_pan & 0xFF;
-        d_msg[4] = (d_dst_pan>>8) & 0xFF;
-        //beacon packet broadcast
-        d_msg[5] = addr & 0xFF;
-        d_msg[6] = (addr>>8) & 0xFF;
-
-        d_msg[7] = d_src & 0xFF;
-        d_msg[8] = (d_src>>8) & 0xFF;
-
-        std::memcpy(d_msg + 9, buf, len);
-
-        uint16_t crc = crc16(d_msg, len + 9);
-
-        d_msg[ 9 + len] = crc & 0xFF;
-        d_msg[10 + len] = crc >> 8;
-
-        d_msg_len = 9 + len + 2;
-    }
-
-    void generate_mac(const char *buf, int len) {
-
-        // FCF
-        // data frame, no security
-        d_msg[0] = d_fcf & 0xFF;
-        d_msg[1] = (d_fcf>>8) & 0xFF;
-
-        // seq nr
-        d_msg[2] = d_seq_nr++;
-
-        // addr info
-        d_msg[3] = d_dst_pan & 0xFF;
-        d_msg[4] = (d_dst_pan>>8) & 0xFF;
-        d_msg[5] = d_dst & 0xFF;
-        d_msg[6] = (d_dst>>8) & 0xFF;
-        d_msg[7] = d_src & 0xFF;
-        d_msg[8] = (d_src>>8) & 0xFF;
-
-        std::memcpy(d_msg + 9, buf, len);
-
-        uint16_t crc = crc16(d_msg, len + 9);
-
-        d_msg[ 9 + len] = crc & 0xFF;
-        d_msg[10 + len] = crc >> 8;
-
-        d_msg_len = 9 + len + 2;
-    }
-
-    void generateAndSendAck(PlantToControllerPacket* recieved_packet) {
+    void generate_send_ack(PlantToControllerPacket* recieved_packet) {
       AckPacket ack_packet;
       ack_packet.frameControlField = d_fcf_ack;
       ack_packet.MACSeqNum = d_seq_nr++;
