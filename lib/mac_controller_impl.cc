@@ -414,7 +414,7 @@ public:
       ack_packet.MACSeqNum = d_seq_nr++;
       ack_packet.dstPANaddr = d_dst_pan;
       ack_packet.dstAddr = recieved_packet->srcAddr;
-      ack_packet.src = d_src;
+      ack_packet.srcAddr = d_src;
       ack_packet.ackSeq = recieved_packet->MACSeqNum;
       uint16_t crc = crc16((char*)(&ack_packet), (sizeof(ack_packet) - sizeof(ack_packet.crc)));
       ack_packet.crc = crc;
