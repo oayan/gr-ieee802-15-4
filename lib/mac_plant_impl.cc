@@ -41,13 +41,6 @@ struct queueElement {
     PlantToControllerPacket p;
 };
 
-// struct queueElementTyped {
-//     uint32_t seq;			//
-//     uint8_t remainingRetransmissionAttempts;	// number of remaining retransmission attempts
-//     int len;
-//     PlantToControllerPacket tx_pkt;
-// };
-
 struct queueMeasureElement {
     uint16_t queuesize;
     uint32_t timeslot_seq;
@@ -221,26 +214,7 @@ public:
         }
 
         if(protocol::isBeacon(rx_pkt->frameControlField)) {
-
-            BeaconPacket* bc_pkt = (BeaconPacket*) rx_pkt;
-            uint16_t dur = bc_pkt->timeslotDur;
-            d_slot_len = bc_pkt->slotLen;
-
-            int i = 0;
-            // Comment: Schedule extraction process
-            for (i = 0; i < 32; i++) {
-                d_current_slotframe = d_current_slotframe << 1;
-                if(buf[(12 + i % d_slot_len)] == d_schedule && (i % d_slot_len != 0)) {
-                    d_current_slotframe = 0x01 | d_current_slotframe;
-                }
-            }
-            d_last_position = i % d_slot_len;
-            d_slotframe = d_current_slotframe >> (31 - d_slot_len);
-            d_seq_timeslot = buf[12 + d_slot_len] << 24 | buf[13 + d_slot_len] << 16 | buf[14 + d_slot_len] << 8 | buf[15 + d_slot_len];
-            // printf("MAC: beacon received,time =%lld, tps = %lld, slotframe = %03x -- %08x, dur = %d, last = %d\n", (gr::high_res_timer_now() - d_tnow), gr::high_res_timer_tps(), d_slotframe, d_current_slotframe, dur, d_last_position);
-            d_slot_dur = (gr::high_res_timer_tps() / 1000) * dur;
-            d_tnow = gr::high_res_timer_now();
-            //queue.erase()
+            extract_beacon_info((BeaconPacket*) rx_pkt);
             return;
         } else if(protocol::isACK(rx_pkt->frameControlField) && (dest == mSrcAddr)) {
             uint8_t ack_seq = buf[9];                             // MAC Layer sequence number
@@ -280,7 +254,7 @@ public:
         pmt::pmt_t blob;
 
         mac_wait_start = gr::high_res_timer_now();
-        dout << "MAC: message sent:" << std::endl;
+        dout << "MAC: message received from Rime:" << std::endl;
         if(pmt::is_eof_object(msg)) {
             dout << "MAC: exiting" << std::endl;
             detail().get()->set_done(true);
@@ -492,6 +466,28 @@ private:
             }
         }
         return 0;
+    }
+
+    void extract_beacon_info(BeaconPacket* beacon_packet) {
+        uint16_t dur = beacon_packet->timeslotDur;
+        d_slot_len = beacon_packet->slotLen;
+        int i = 0;
+        // d_current_slotframe contains flags about the ownership of next 32 timeslots (every one bit of uint32_t indicates ownership of one timeslot)
+        // transmission of a packet is allowed, if the flag is 1. 
+        // It may contain more timeslot than superframe in order to continiue transmitting even if the beacon is lost.
+        // d_slotframe contains flags belong to one superframe. d_last_position contains the number of the last timeslot represented by d_current_slotframe.
+        // d_slotframe and d_last_position are used to recalculate ownership of the next 32 timeslot at the end of every timeslot. 
+        for (i = 0; i < 32; i++) {
+            d_current_slotframe = d_current_slotframe << 1;
+            if(beacon_packet->schedule[(i % d_slot_len)] == d_schedule && (i % d_slot_len != 0)) {
+                d_current_slotframe = 0x01 | d_current_slotframe;
+            }
+        }
+        d_last_position = i % d_slot_len;
+        d_slotframe = d_current_slotframe >> (31 - d_slot_len);
+        d_seq_timeslot = beacon_packet->timeslotNum;
+        d_slot_dur = (gr::high_res_timer_tps() / 1000) * dur;
+        d_tnow = gr::high_res_timer_now();
     }
 
     /*!
