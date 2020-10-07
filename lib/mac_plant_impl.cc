@@ -226,7 +226,7 @@ public:
                 ack_receive[pck_seq] = (gr::high_res_timer_now() / tpus);  // MAC2MAC
             }
             return;
-        } else if(dest != d_schedule && dest != BROADCAST_ADDR ) {
+        } else if(dest != mSrcAddr && dest != BROADCAST_ADDR ) {
             // Not broadcast or not my packet
             // TODO Mapping to Dest Address & Source Address
             std::cout << "Wrong!" << std::endl;
