@@ -92,6 +92,15 @@ enum MACFrameType {
     MACCommand = 3
 };
 
+enum PlantMACAddr {
+    Loop1 = 0x3340,
+    Loop2 = 0x3341,
+    Loop3 = 0x3342,
+    Loop4 = 0x3343,
+    Broadcast = 0xFFFF
+};
+
+
 /*!
  * \brief Collection of Packet Formats is defined in this file
  *
@@ -121,6 +130,17 @@ public:
 
     static bool isACK(const uint16_t& fcf) {
         return getFrameType(fcf) == MACFrameType::Ack;
+    }
+
+    static uint16_t plantMACFromLoopID(const uint16_t loop_id) {
+    	switch(loop_id)
+    	{
+    		case 1 : return PlantMACAddr::Loop1;
+    		case 2 : return PlantMACAddr::Loop2;
+    		case 3 : return PlantMACAddr::Loop3;
+    		case 4 : return PlantMACAddr::Loop4;
+    		default : return PlantMACAddr::Broadcast;
+    	}
     }
 
     static void printUint16LSBtoMSB(const uint16_t& u) {

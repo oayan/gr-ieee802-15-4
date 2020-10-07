@@ -130,7 +130,7 @@ public:
                         // add sequence number of the current timeslot to the beacon
                         // so plants can synchronize their timeslots for measurements
                         d_beacon_str.timeslotNum = d_cnt_timeslot;
-                        generate_mac_beacon();  //add mac header and footer
+                        generate_update_beacon_mac();  //add mac header and footer
                         // send packet
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob((char*)(&d_beacon_str), sizeof(d_beacon_str))));
@@ -174,6 +174,7 @@ public:
     */
     void mac_controller_in(pmt::pmt_t msg) {
         // TODO Check whether d_mutex is needed
+        gr::thread::scoped_lock(d_mutex);
         d_last_recieved = gr::high_res_timer_now();   // update timer for measurement
         // TODO This could have been a char array
         pmt::pmt_t blob;
@@ -231,25 +232,9 @@ public:
     */
     void app_controller_in(pmt::pmt_t msg) {
         // TODO Check whether d_mutex is needed
+        gr::thread::scoped_lock(d_mutex);
         // TODO These 2 could have been char array probably
         pmt::pmt_t blob;
-        pmt::pmt_t tmp;
-
-        // differenciate the schedule packets from control application packets
-        uint8_t is_schedule = 0;  // flag for schedule packet
-        
-        // TODO Carry this after the is_eof_object check below. Doing it twice, tmp redundant
-        if(pmt::is_pair(msg)) {
-            tmp = pmt::cdr(msg);
-        } else {
-            assert(false);
-        }
-        size_t data_len = pmt::blob_length(tmp);
-        unsigned char buf[256];
-        std::memcpy(buf, pmt::blob_data(tmp), data_len);
-        int i = 0;
-        // TODO 0xaa define 0xaa above
-
 
         if(pmt::is_eof_object(msg)) {
             dout << "MAC: exiting" << std::endl;
@@ -263,27 +248,13 @@ public:
             dout << "MAC: unknown input" << std::endl;
             return;
         }
+        const char* data = (const char*) pmt::blob_data(blob);
 
+        ControllerToPlantPacket tx_pkt;
+        tx_pkt = generate_mac(data);
 
-    /*  if it is a control application packet, identify the plant number (provided by application)
-            as destination address and sent. Receiver MAC checks the destination address */
-
-        // TODO controllerToPlantPacketFormat
-        uint16_t dest_addr = buf[4] | (buf[5] << 8);
-        // for(i = 8; i < data_len; i++){
-        //  buf[i-4] = buf[i];
-        // }
-        generate_mac_scheduler(buf, (data_len), dest_addr);
-        //          //unsigned char buf[256];
-        //  //std::memcpy(buf, pmt::blob_data(tmp), d_msg_len);
-        //  for(int i = 0; i < d_msg_len; i++) {
-        //   dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
-        //   if(i % 16 == 15) {
-        //   dout << std::endl;
-        //    }
-        // }
         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                         pmt::make_blob(d_msg, d_msg_len)));
+                  pmt::make_blob((char*)(&tx_pkt), sizeof(tx_pkt))));
         //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
         // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
         //             pmt::make_blob("1", 1)));
@@ -308,54 +279,48 @@ public:
         return crc;
     }
 
-    // adds mac header and footer destination address is added as addr in order to create unicast mac header
-    void generate_mac_scheduler(unsigned char *buf, int len, uint16_t addr) {
-        // FCF
-        // data frame, no security
-        d_msg[0] = d_fcf & 0xFF;
-        d_msg[1] = (d_fcf>>8) & 0xFF;
+    ControllerToPlantPacket generate_mac(const char *data) {
+        // Copy the Payload into correct place
+      ControllerToPlantPacket tx_pkt;
+      
+      std::memcpy(&(tx_pkt.RIMEHeader),
+                  data,
+                  sizeof(tx_pkt.RIMEHeader) + sizeof(tx_pkt.loopID) + sizeof(tx_pkt.seqNum) + CONTROL_INPUT_LEN * sizeof(*(tx_pkt.control_input)));
+      
+      tx_pkt.frameControlField = d_fcf;
+      tx_pkt.MACSeqNum = d_seq_nr++;
+      tx_pkt.dstPANaddr = d_dst_pan;
+      tx_pkt.dstAddr = protocol::plantMACFromLoopID(tx_pkt.loopID); // TODO: table
+      tx_pkt.srcAddr = d_src;
 
-        // seq nr
-        d_msg[2] = d_seq_nr++;
+      // Calculate & Fill 16-bit CRC
+      uint16_t crc = crc16((char*)(&tx_pkt), sizeof(tx_pkt) - sizeof(tx_pkt.crc));
+      tx_pkt.crc = crc;
 
-        // addr info
-        d_msg[3] = d_dst_pan & 0xFF;
-        d_msg[4] = (d_dst_pan>>8) & 0xFF;
-        //destination addr
-        // TODO Get rid of plant_id, create a look-up table for plant_id & dest_addr
-        d_msg[5] = addr & 0xFF;
-        d_msg[6] = (addr >> 8) & 0xFF;
-        d_msg[7] = d_src & 0xFF;
-        d_msg[8] = (d_src >> 8) & 0xFF;
-
-        std::memcpy(d_msg + 9, buf, len);
-
-        uint16_t crc = crc16(d_msg, len + 9);
-
-        d_msg[ 9 + len] = crc & 0xFF;
-        d_msg[10 + len] = crc >> 8;
-
-        d_msg_len = 9 + len + 2;
+      return tx_pkt;
     }
 
-    void generate_send_ack(PlantToControllerPacket* recieved_packet) {
-      AckPacket ack_packet;
-      ack_packet.frameControlField = d_fcf_ack;
-      ack_packet.MACSeqNum = d_seq_nr++;
-      ack_packet.dstPANaddr = d_dst_pan;
-      ack_packet.dstAddr = recieved_packet->srcAddr;
-      ack_packet.srcAddr = d_src;
-      ack_packet.ackSeq = recieved_packet->MACSeqNum;
-      uint16_t crc = crc16((char*)(&ack_packet), (sizeof(ack_packet) - sizeof(ack_packet.crc)));
-      ack_packet.crc = crc;
+    void generate_send_ack(PlantToControllerPacket* rx_pkt) {
+      AckPacket ack_pkt;
+
+      ack_pkt.frameControlField = d_fcf_ack;
+      ack_pkt.MACSeqNum = d_seq_nr++;
+      ack_pkt.dstPANaddr = d_dst_pan;
+      ack_pkt.dstAddr = rx_pkt->srcAddr;
+      ack_pkt.srcAddr = d_src;
+      ack_pkt.ackSeq = rx_pkt->MACSeqNum;
+
+      uint16_t crc = crc16((char*)(&ack_pkt), (sizeof(ack_pkt) - sizeof(ack_pkt.crc)));
+      ack_pkt.crc = crc;
+
       message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                        pmt::make_blob((char*)(&ack_packet), sizeof(ack_packet))));
+                        pmt::make_blob((char*)(&ack_pkt), sizeof(ack_pkt))));
       // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
       // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
       //                  pmt::make_blob("1", 1)));
     }
 
-    void generate_mac_beacon() {
+    void generate_update_beacon_mac() {
 
         // FCF
         // data frame, no security
