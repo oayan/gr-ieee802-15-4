@@ -46,9 +46,7 @@ public:
                      int fcf=0x8841,        // Frame control field
                      int seq_nr=0,          // Initial sequence number
                      int dst_pan=0x1aaa,    // Personal Area Network Address
-                     int dst=0xffff,        // Destination Address (0xffff broadcast)
-                     int src=0x3344,        // Source Address
-                     int schedule = 0x01);  // Plant ID TODO To be removed
+                     int plantid = 0x01);  // Plant ID TODO To be removed
     
 protected:
     enum QueuingStrategies {

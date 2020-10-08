@@ -42,8 +42,6 @@ public:
           int fcf=0x8841,
           int seq_nr=0,
           int dst_pan=0x1aaa,
-          int dst=0xffff,
-          int src=0x3344,
           int ts_dur_ms=10,
           int slot_len=20,
           bool beacon_eanble=true ); // TODO Save Stats

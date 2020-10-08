@@ -61,7 +61,7 @@ public:
 
 #define dout d_debug && std::cout
 
-    mac_plant_impl(bool debug, int method, int fcf, int seq_nr, int dst_pan, int dst, int src, int schedule) :
+    mac_plant_impl(bool debug, int method, int fcf, int seq_nr, int dst_pan, int plantid) :
         block ("mac_plant",
                gr::io_signature::make(0, 0, 0),
                gr::io_signature::make(0, 0, 0)),
@@ -70,12 +70,12 @@ public:
         d_fcf(fcf),
         d_seq_nr(seq_nr),
         d_dst_pan(dst_pan),
-        d_dst(dst),
-        mSrcAddr(src),
         mQueuingStrategy(static_cast<QueuingStrategies>(method)),
-        d_schedule(schedule),
+        d_plant_id(plantid),
         d_num_packet_errors(0),
         d_num_packets_received(0) {
+
+        init_src_dst();
 
         message_port_register_in(pmt::mp("app in"));
         set_msg_handler(pmt::mp("app in"), boost::bind(&mac_plant_impl::app_in, this, _1));
@@ -219,17 +219,18 @@ public:
             d_tnow = gr::high_res_timer_now();
             extract_beacon_info((BeaconPacket*) rx_pkt);
             return;
-        } else if(protocol::isACK(rx_pkt->frameControlField) && (dest == mSrcAddr)) {
+        } else if(protocol::isACK(rx_pkt->frameControlField) && (dest == d_src_addr)) {
             uint8_t ack_seq = buf[9];                             // MAC Layer sequence number
             uint32_t pck_seq = findAndRemoveFromQueue(ack_seq);   // APP Layer seq_num
             if(pck_seq < 10000) {
                 ack_receive[pck_seq] = (gr::high_res_timer_now() / tpus);  // MAC2MAC
             }
             return;
-        } else if(dest != mSrcAddr && dest != BROADCAST_ADDR ) {
+        } else if(dest != d_src_addr && dest != BROADCAST_ADDR ) {
             // Not broadcast or not my packet
             // TODO Mapping to Dest Address & Source Address
-            std::cout << "Wrong!" << std::endl;
+            printf("src = %04x, dst = %04x\n", d_src_addr, dest);
+            // std::cout << "Wrong! src = " << d_src_addr << "dest" << dest <<std::endl;
             return;
         }
 
@@ -344,7 +345,7 @@ private:
     uint8_t     d_seq_nr;
     uint16_t    d_dst_pan;
     uint16_t    d_dst;
-    uint16_t    mSrcAddr;
+    uint16_t    d_src_addr;
     char        d_msg[256];
     char        response[20];
     // picking 10 as the array size
@@ -353,7 +354,7 @@ private:
     QueuingStrategies    mQueuingStrategy;
     std::vector<queueElement> queue;
     gr::high_res_timer_type d_tnow;
-    uint16_t	d_schedule;
+    uint16_t	d_plant_id;
     long long int    d_slot_dur = 0;
     uint32_t    d_seq_timeslot = 0;
     uint32_t    d_current_slotframe = 0;
@@ -389,7 +390,7 @@ private:
         time_t now = time(0);
         tm *ltm = localtime(&now);
         char file_name [255];
-        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         if(!tmpfile) {
             printf("could not opened\n");
@@ -401,7 +402,7 @@ private:
                 printf("1\n");
         }
         tmpfile.close();
-        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         while(!queueValues.empty()) {
             struct queueMeasureElement toWrite = queueValues[0];
@@ -410,7 +411,7 @@ private:
         }
         tmpfile.close();
         // TODO Change this, RTT measurement could be enough
-        sprintf(file_name,"../../results/results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_schedule, mQueuingStrategy);
+        sprintf(file_name,"../../results/results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         int i = 0;
         while(i < 10000) {
@@ -419,6 +420,12 @@ private:
             i++;
         }
         tmpfile.close();
+    }
+
+    void init_src_dst(){
+        d_src_addr = protocol::plantMACFromLoopID(d_plant_id);
+        d_dst = protocol::getContollerMACAddr();
+        printf("src = %04x dest = %04x\n", d_src_addr, d_dst);
     }
 
     void addToQueue(const PlantToControllerPacket& pkt) {
@@ -487,7 +494,7 @@ private:
         
         d_current_slotframe = 0;               // Placeholder of the next 32 slots' schedule to extract into 
         for (i = 0; i < d_num_timeslot_per_superframe; i++) {
-            if(beacon_packet->schedule[i] == d_schedule) {
+            if(beacon_packet->schedule[i] == d_plant_id) {
                 d_current_slotframe = (0x00000001 << i) | d_current_slotframe;
             }
         }
@@ -520,7 +527,7 @@ private:
         // addr info
         tx_pkt.dstPANaddr = d_dst_pan;
         tx_pkt.dstAddr = d_dst;
-        tx_pkt.srcAddr = mSrcAddr;
+        tx_pkt.srcAddr = d_src_addr;
 
         // Copy the Payload into correct place
         std::memcpy(&(tx_pkt.RIMEHeader),
@@ -539,6 +546,6 @@ private:
 
 
 mac_plant::sptr
-mac_plant::make(bool debug, int method, int fcf, int seq_nr, int dst_pan, int dst, int src, int schedule) {
-    return gnuradio::get_initial_sptr(new mac_plant_impl(debug,method,fcf,seq_nr,dst_pan,dst,src,schedule));
+mac_plant::make(bool debug, int method, int fcf, int seq_nr, int dst_pan, int plantid) {
+    return gnuradio::get_initial_sptr(new mac_plant_impl(debug,method,fcf,seq_nr,dst_pan,plantid));
 }

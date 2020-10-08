@@ -46,7 +46,7 @@ public:
 
 #define dout d_debug && std::cout
 
-    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms, int slot_len, bool beacon_enable) :
+    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms, int slot_len, bool beacon_enable) :
         block ("mac_controller",
                gr::io_signature::make(0, 0, 0),
                gr::io_signature::make(0, 0, 0)),
@@ -55,8 +55,6 @@ public:
         d_fcf(fcf),
         d_seq_nr(seq_nr),
         d_dst_pan(dst_pan),
-        d_dst(dst),
-        d_src(src),
         d_save_stats(0),
         d_beacon_enable(beacon_enable),
         d_timeslot_dur_ms(ts_dur_ms),
@@ -65,7 +63,7 @@ public:
         d_num_packet_errors(0),
         d_num_packets_received(0) {
 
-        beacon_init(d_beacon_enable);
+        controller_init();
 
         message_port_register_in(pmt::mp("app in"));
         set_msg_handler(pmt::mp("app in"), boost::bind(&mac_controller_impl::app_controller_in, this, _1));
@@ -186,14 +184,13 @@ public:
         }
 
         size_t data_len = pmt::blob_length(blob);
-        PlantToControllerPacket* rx_pkt = (PlantToControllerPacket*)pmt::blob_data(blob);
-
         if(data_len < 11) {
             // dout << "MAC: frame too short. Dropping!" << std::endl;
             return;
         }
+        PlantToControllerPacket* rx_pkt = (PlantToControllerPacket*)pmt::blob_data(blob);
 
-        uint16_t crc = crc16((char*)pmt::blob_data(blob), data_len);
+        uint16_t crc = crc16((char*)rx_pkt,sizeof(*rx_pkt));
         d_num_packets_received++;
         if(crc) {
             d_num_packet_errors++;
@@ -290,7 +287,7 @@ public:
       tx_pkt.frameControlField = d_fcf;
       tx_pkt.MACSeqNum = d_seq_nr++;
       tx_pkt.dstPANaddr = d_dst_pan;
-      tx_pkt.dstAddr = protocol::plantMACFromLoopID(tx_pkt.loopID); // TODO: table
+      tx_pkt.dstAddr = protocol::plantMACFromLoopID(tx_pkt.loopID);
       tx_pkt.srcAddr = d_src;
 
       // Calculate & Fill 16-bit CRC
@@ -327,11 +324,16 @@ public:
         d_beacon_str.frameControlField = d_fcf_beacon;
         d_beacon_str.MACSeqNum = d_seq_nr++;
         d_beacon_str.dstPANaddr = d_dst_pan;
-        d_beacon_str.dstAddr = d_dst;
+        d_beacon_str.dstAddr = protocol::getBroadcastMACAddr();
         d_beacon_str.srcAddr = d_src;
 
         uint16_t crc = crc16((char*)(&d_beacon_str), (sizeof(d_beacon_str) - sizeof(d_beacon_str.crc)));
         d_beacon_str.crc = crc;
+    }
+
+    void controller_init(){
+      d_src = protocol::getContollerMACAddr();
+      beacon_init(d_beacon_enable);
     }
 
     void beacon_init(bool beacon) {
@@ -381,7 +383,6 @@ private:
     uint16_t    d_fcf_ack = 0x8842;
     uint8_t     d_seq_nr;
     uint16_t    d_dst_pan;
-    uint16_t    d_dst;
     uint16_t    d_src;
     uint16_t    d_save_stats;
     char        d_msg[256];
@@ -410,6 +411,6 @@ private:
 };
 
 mac_controller::sptr
-mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int dst, int src, int ts_dur_ms, int slot_len, bool beacon_enable) {
-    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,dst,src,ts_dur_ms,slot_len,beacon_enable));
+mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms, int slot_len, bool beacon_enable) {
+    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,ts_dur_ms,slot_len,beacon_enable));
 }
