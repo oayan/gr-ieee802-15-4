@@ -44,7 +44,12 @@ public:
           int dst_pan=0x1aaa,
           int ts_dur_ms=10,
           int slot_len=20,
-          bool beacon_eanble=true ); // TODO Save Stats
+          bool beacon_eanble=true,
+          int schedule_method = 0 ); // TODO Save Stats
+protected:
+    enum SchedulingMethods {
+        Round_Robin = 0
+    };
 };
 
 }  // namespace ieee802_11

@@ -41,12 +41,12 @@ public:
     
     typedef boost::shared_ptr<mac_plant> sptr;
     static sptr make(bool debug=false,
-                     int method = 0,
+                     int method=0,
                      /* default values for receive sensitivity testing in Zigbee test spec 14-0332-01 */
                      int fcf=0x8841,        // Frame control field
                      int seq_nr=0,          // Initial sequence number
                      int dst_pan=0x1aaa,    // Personal Area Network Address
-                     int plantid = 0x01);  // Plant ID TODO To be removed
+                     int plantid=0x01);  // Plant ID TODO To be removed
     
 protected:
     enum QueuingStrategies {

@@ -28,6 +28,7 @@
 #define CONTROL_INPUT_LEN 1
 #define MASK_FRAME_TYPE 0x0007
 #define MASK_ACK_ENABLE 0x0020
+#define SAVE_STATS_SYMBOL 0
 
 namespace gr {
 namespace ieee802_15_4 {
@@ -81,6 +82,11 @@ struct AckPacket {
     uint16_t srcAddr;
     uint8_t ackSeq;
     uint16_t crc;
+};
+
+struct SaveStatsSignal {
+    char RIMEHeader[4];
+    uint32_t SaveStatsIdentifier;
 };
 
 #pragma pack(pop)
