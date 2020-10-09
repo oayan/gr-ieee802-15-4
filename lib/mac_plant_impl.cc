@@ -27,12 +27,14 @@
 #include <iomanip>
 #include <vector>
 #include <fstream>
+#include <dirent.h>
 
 #define MIN_PKT_LEN 11
 #define BROADCAST_ADDR 0xFFFF
 #define SEND_SINGLE_BYTE false
 #define BITS_IN_BYTE 8
 #define MAX_NUM_LOGGED_PACK 10000
+#define QUEUE_SIZE 5
 
 using namespace gr::ieee802_15_4;
 
@@ -47,14 +49,6 @@ struct queueMeasureElement {
     uint16_t queuesize;
     uint32_t timeslot_seq;
 };
-
-// struct aoiMeasurementElement {
-//     uint32_t sequence;
-//     uint32_t arrival;
-//     uint32_t sent;
-//     uint32_t answer;
-// };
-
 
 
 class mac_plant_impl : public mac_plant {
@@ -101,7 +95,6 @@ public:
         try {
             // flow graph startup delay
             boost::this_thread::sleep(boost::posix_time::milliseconds(500));
-            queue.reserve(1000);
             queueValues.reserve(1000);
 
             while(1) {
@@ -155,15 +148,6 @@ public:
                         }
 
                     }
-
-                    // TODO REMOVE THIS WITH SAVE STATS
-                    // TODO redundant with above
-                    // if ((gr::high_res_timer_now() - d_last_pack_recieved) > (gr::high_res_timer_tps() * 5) && d_last_pack_recieved != 0) {
-                    //     saveStats();
-                    //     printf("end of plant\n");
-                    // }
-//                     d_current_slotframe = d_current_slotframe << 1 | ( 0x1 & (d_slotframe >> (d_num_timeslot_per_superframe - d_last_position)));
-                    
                 }
             }
 
@@ -328,17 +312,6 @@ public:
         return crc;
     }
 
-
-    // void print_message() {
-    //     for(int i = 0; i < d_msg_len; i++) {
-    //         dout << std::setfill('0') << std::setw(2) << std::hex << ((unsigned int)d_msg[i] & 0xFF) << std::dec << " ";
-    //         if(i % 16 == 15) {
-    //             dout << std::endl;
-    //         }
-    //     }
-    //     dout << std::endl;
-    // }
-
     int get_num_packet_errors() {
         return d_num_packet_errors;
     }
@@ -364,7 +337,7 @@ private:
     char        d_msg[256];
     // picking 10 as the array size
     // std::vector<std::array<char, 10>> va;
-    uint8_t    	d_queue_size = 5;
+    uint8_t    	d_queue_size = QUEUE_SIZE;
     QueuingStrategies    mQueuingStrategy;
     std::vector<queueElement> queue;
     gr::high_res_timer_type d_tnow;
@@ -400,24 +373,41 @@ private:
 private:
     void saveStats() {
         printf("save stats\n");
+        const char* path = "workarea/gui_ncs/Logs";
+        DIR *dir = opendir(path);
+        struct dirent *entry = readdir(dir);
+        std::string folder_name;
+        int measurement_num = 0;
+        int current_num = 0;
+        while (entry != NULL)
+        {
+            if (entry->d_type == DT_DIR){
+                folder_name = entry->d_name;
+                if(folder_name.find("Measurement_") != std::string::npos){
+                    sscanf (entry->d_name,"Measurement_%d", &measurement_num);
+                    if(measurement_num > current_num){
+                        current_num = measurement_num;
+                    }
+                }
+            }
+            entry = readdir(dir);
+        }
+        closedir(dir);
         d_last_pack_recieved = 0;
         std::ofstream tmpfile;
         time_t now = time(0);
         tm *ltm = localtime(&now);
         char file_name [255];
-        sprintf(file_name,"workarea/results/%d-%d-%d_%d-%d-%dMACrttduration(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/Measurement_%d/Loop_%d/MACRtt_Method%d.csv",current_num, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         if(!tmpfile) {
             printf("could not opened\n");
         }
         for(int i = 0; i < MAX_NUM_LOGGED_PACK; i++) {
             tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
-            // printf("%d, ", (rtt_measure[i]));
-            if(i%10 == 100)
-                printf("1\n");
         }
         tmpfile.close();
-        sprintf(file_name,"workarea/results/%d-%d-%d_%d-%d-%dMACqueue(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/Measurement_%d/Loop_%d/MACqueue_Method%d.csv", current_num, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         while(!queueValues.empty()) {
             struct queueMeasureElement toWrite = queueValues[0];
@@ -425,16 +415,6 @@ private:
             tmpfile << toWrite.timeslot_seq << "," << toWrite.queuesize << std::endl;
         }
         tmpfile.close();
-        // TODO Change this, RTT measurement could be enough
-        // sprintf(file_name,"../../results/results/%d-%d-%d_%d-%d-%dMACaoi(%d)Method%d.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec, d_plant_id, mQueuingStrategy);
-        // tmpfile.open (file_name);
-        // int i = 0;
-        // while(i < 10000) {
-        //     struct aoiMeasurementElement toWrite = aoiValues[i];
-        //     tmpfile << toWrite.sequence << "," << toWrite.arrival << "," << toWrite.sent << "," << toWrite.answer << std::endl;
-        //     i++;
-        // }
-        // tmpfile.close();
     }
 
     void init_src_dst(){
