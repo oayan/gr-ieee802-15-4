@@ -28,8 +28,6 @@
 #include <fstream>
 #include <time.h>
 
-#define NUM_LOOP 2
-
 // a container type to collect the arrival time (timeslot) of a packet
 // struct measurementElement {
 //     uint8_t  controller_num;  // identification number of controller-plant pair
@@ -48,7 +46,7 @@ public:
 
 #define dout d_debug && std::cout
 
-    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms, int slot_len, bool beacon_enable, int schedule_method):
+    mac_controller_impl(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms, int nr_loop, int slot_len, bool beacon_enable, int schedule_method):
         block ("mac_controller",
                gr::io_signature::make(0, 0, 0),
                gr::io_signature::make(0, 0, 0)),
@@ -60,6 +58,7 @@ public:
         d_save_stats(0),
         d_beacon_enable(beacon_enable),
         d_timeslot_dur_ms(ts_dur_ms),
+        d_nr_loop(nr_loop),
         d_timeslot_dur((gr::high_res_timer_tps() / 1000) * ts_dur_ms),
         d_slot_len(slot_len),
         d_beacon_schedule_method(static_cast<SchedulingMethods>(schedule_method)),
@@ -346,9 +345,11 @@ public:
         d_beacon_str.numTimeslotPerSuperframe = d_slot_len;
         d_beacon_str.timeslotDur = d_timeslot_dur_ms;
         if(d_beacon_schedule_method == SchedulingMethods::Round_Robin){
-            for(i = 0; i < d_slot_len; i++){
-                // +1 since the smallest plant id is not 0 but 1
-                d_beacon_str.schedule[i] = (i % NUM_LOOP) + 1;
+            // the first slot belongs to beacon, thus total number of slots belongs to plants is d_slot_len - 1
+            for(i = 0; i < d_slot_len - 1; i++){
+                // d_beacon_str.schedule[0] belongs to beacon, thus plant slots start from d_beacon_str.schedule[i + 1]
+                // (i % d_nr_loop) + 1 since the smallest plant id is not 0 but 1
+                d_beacon_str.schedule[i + 1] = (i % d_nr_loop) + 1;
             }
         }
         d_beacon_str.schedule[0] = 0x00;
@@ -393,6 +394,7 @@ private:
     uint16_t    d_save_stats;
     char        d_msg[256];
 
+    uint16_t    d_nr_loop;
     bool        d_beacon_enable;
     gr::high_res_timer_type d_tnow;     // to save the start time of current timeslot
     long long int    d_timeslot_dur_ms;
@@ -418,6 +420,6 @@ private:
 };
 
 mac_controller::sptr
-mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms, int slot_len, bool beacon_enable, int schedule_method) {
-    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,ts_dur_ms,slot_len,beacon_enable,schedule_method));
+mac_controller::make(bool debug, int fcf, int seq_nr, int dst_pan, int ts_dur_ms,int nr_loop, int slot_len, bool beacon_enable, int schedule_method) {
+    return gnuradio::get_initial_sptr(new mac_controller_impl(debug,fcf,seq_nr,dst_pan,ts_dur_ms,nr_loop,slot_len,beacon_enable,schedule_method));
 }

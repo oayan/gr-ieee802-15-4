@@ -43,6 +43,7 @@ public:
           int seq_nr=0,
           int dst_pan=0x1aaa,
           int ts_dur_ms=10,
+          int nr_loop=1,
           int slot_len=20,
           bool beacon_eanble=true,
           int schedule_method = 0 ); // TODO Save Stats
