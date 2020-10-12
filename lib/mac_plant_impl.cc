@@ -373,7 +373,11 @@ private:
 private:
     void saveStats() {
         printf("save stats\n");
-        const char* path = "workarea/gui_ncs/Logs";
+        const char *strategy;
+        strategy = get_strategy_name(mQueuingStrategy);
+        char path[50];
+        sprintf(path, "workarea/gui_ncs/Logs/%s/", strategy);
+        
         DIR *dir = opendir(path);
         struct dirent *entry = readdir(dir);
         std::string folder_name;
@@ -398,7 +402,7 @@ private:
         time_t now = time(0);
         tm *ltm = localtime(&now);
         char file_name [255];
-        sprintf(file_name,"workarea/gui_ncs/Logs/Measurement_%d/Loop_%d/MACRtt_Method%d.csv",current_num, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACRtt_Method%d.csv", strategy, current_num, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         if(!tmpfile) {
             printf("could not opened\n");
@@ -407,7 +411,7 @@ private:
             tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
         }
         tmpfile.close();
-        sprintf(file_name,"workarea/gui_ncs/Logs/Measurement_%d/Loop_%d/MACqueue_Method%d.csv", current_num, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACqueue_Method%d.csv", strategy, current_num, d_plant_id, mQueuingStrategy);
         tmpfile.open (file_name);
         while(!queueValues.empty()) {
             struct queueMeasureElement toWrite = queueValues[0];
@@ -536,7 +540,32 @@ private:
         return tx_pkt;
     }
 
+    const char *get_strategy_name(QueuingStrategies strategy){
 
+        const char *return_str;
+
+        if (strategy == QueuingStrategies::FCFS_TailDrop){
+            const char *buffer = "FCFS_TD";
+            return buffer;
+        } else if(strategy == QueuingStrategies::LCFS_PacketDiscard){
+            const char *buffer = "LCFS";
+            return buffer;
+        } else if (strategy == QueuingStrategies::TOD_TailDrop){
+            const char *buffer = "FCFS_TOD_TD";
+            return buffer;
+        } else if (strategy == QueuingStrategies::FCFS_FrontDrop){
+            const char *buffer = "FCFS_FD";
+            return buffer;
+        } else if (strategy == QueuingStrategies::TOD_FrontDrop){
+            const char *buffer = "FCFS_TOD_FD";
+            return buffer;
+        } else if(strategy == QueuingStrategies::No_Queue){
+            const char *buffer = "WO_BEACON";
+            return buffer;
+        }
+
+        return return_str;
+    }
 };
 
 
