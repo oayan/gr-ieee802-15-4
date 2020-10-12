@@ -216,7 +216,7 @@ public:
         } else if(dest != d_src_addr && dest != BROADCAST_ADDR ) {
             // Not broadcast or not my packet
             // TODO Mapping to Dest Address & Source Address
-            printf("src = %04x, dst = %04x\n", d_src_addr, dest);
+            // printf("src = %04x, dst = %04x\n", d_src_addr, dest);
             // std::cout << "Wrong! src = " << d_src_addr << "dest" << dest <<std::endl;
             return;
         }
@@ -420,7 +420,7 @@ private:
     void init_src_dst(){
         d_src_addr = protocol::plantMACFromLoopID(d_plant_id);
         d_dst = protocol::getContollerMACAddr();
-        printf("src = %04x dest = %04x\n", d_src_addr, d_dst);
+        printf("init plant = %d with src = %04x dest = %04x\n", d_plant_id, d_src_addr, d_dst);
     }
 
     void addToQueue(const PlantToControllerPacket& pkt) {
