@@ -68,7 +68,9 @@ public:
         mQueuingStrategy(static_cast<QueuingStrategies>(method)),
         d_plant_id(plantid),
         d_num_packet_errors(0),
-        d_num_packets_received(0) {
+        d_num_packets_received(0),
+        d_packet_sent_counter(0),
+        d_packet_received_counter(0) {
 
         init_src_dst();
 
@@ -139,6 +141,7 @@ public:
                         }
 
                         // Forward TX data packet to PHY layer
+                        d_packet_sent_counter++;
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob(&(newElement.p), sizeof(PlantToControllerPacket))));
 
@@ -223,6 +226,7 @@ public:
 
         uint32_t seqNum = rx_pkt->seqNum;
         d_num_packets_received++;
+        d_packet_received_counter++;
 
 
         // aoiValues[seqNum].answer = d_seq_timeslot;
@@ -356,6 +360,8 @@ private:
     long long int 	rtt_start;
     uint64_t 	mac_send[MAX_NUM_LOGGED_PACK];
     uint64_t 	app_to_mac[MAX_NUM_LOGGED_PACK];
+    uint64_t    d_packet_sent_counter;
+    uint64_t    d_packet_received_counter;
     long long int 	mac_wait_start;
     long long int tpus = (gr::high_res_timer_tps() / 1000000);
     std::vector<queueMeasureElement>	queueValues;
@@ -402,22 +408,29 @@ private:
         time_t now = time(0);
         tm *ltm = localtime(&now);
         char file_name [255];
-        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACRtt_Method%d.csv", strategy, current_num, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACRtt.csv", strategy, current_num, d_plant_id);
         tmpfile.open (file_name);
         if(!tmpfile) {
             printf("could not opened\n");
         }
         for(int i = 0; i < MAX_NUM_LOGGED_PACK; i++) {
             tmpfile <<  app_to_mac[i] << "," << mac_send[i] << "," << ack_receive[i] << "," << mac_to_app[i] << std::endl;
+            app_to_mac[i] = mac_send[i] = ack_receive[i] = mac_to_app[i] = 0;
         }
         tmpfile.close();
-        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACqueue_Method%d.csv", strategy, current_num, d_plant_id, mQueuingStrategy);
+        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACqueue.csv", strategy, current_num, d_plant_id);
         tmpfile.open (file_name);
         while(!queueValues.empty()) {
             struct queueMeasureElement toWrite = queueValues[0];
             queueValues.erase(queueValues.begin());
             tmpfile << toWrite.timeslot_seq << "," << toWrite.queuesize << std::endl;
         }
+        tmpfile.close();
+        printf("write received and sent\n");
+        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACsent_received.csv", strategy, current_num, d_plant_id);
+        tmpfile.open (file_name);
+        tmpfile << d_packet_sent_counter << "," << d_packet_received_counter << std::endl;
+        d_packet_sent_counter = d_packet_received_counter = 0;
         tmpfile.close();
     }
 
@@ -441,6 +454,7 @@ private:
             queue.push_back(newElement);
         } else if (mQueuingStrategy == QueuingStrategies::No_Queue) {
             // RANDOM ACCESS - No Wait
+            d_packet_sent_counter++;
             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                              pmt::make_blob(&(newElement.p), newElement.len)));
             if (SEND_SINGLE_BYTE) {
