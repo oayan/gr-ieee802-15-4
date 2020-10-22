@@ -127,7 +127,6 @@ public:
                     // Check if the current slot is allocated to me (the corresponding bit should already be set to '1' upon a beacon reception)
                     if(d_current_slotframe & (0x1 << d_current_position) && !queue.empty()) {
                         struct queueElement newElement;
-                        rtt_start = gr::high_res_timer_now();
                         newElement = queue[0];
                         if((newElement.remainingRetransmissionAttempts == 1) || (mQueuingStrategy == QueuingStrategies:: TOD_TailDrop) || (mQueuingStrategy == QueuingStrategies::TOD_FrontDrop)) {
                             queue.erase(queue.begin());
@@ -137,7 +136,7 @@ public:
 
                         // aoiValues[newElement.seq].sent = d_seq_timeslot;
                         if(newElement.seq < MAX_NUM_LOGGED_PACK){
-                            mac_send[newElement.seq] = (rtt_start / tpus);
+                            mac_send[newElement.seq] = (gr::high_res_timer_now() / tpus);
                         }
 
                         // Forward TX data packet to PHY layer
@@ -151,6 +150,11 @@ public:
                         }
 
                     }
+                }
+                if(d_save_stats == 1 && ((gr::high_res_timer_now() - d_save_stats_timer) > (gr::high_res_timer_tps() * 2))){
+                    printf("stats save\n");
+                    d_save_stats = 0;
+                    saveStats();
                 }
             }
 
@@ -213,7 +217,9 @@ public:
             uint8_t ack_seq = buf[9];                             // MAC Layer sequence number
             uint32_t pck_seq = findAndRemoveFromQueue(ack_seq);   // APP Layer seq_num
             if(pck_seq < MAX_NUM_LOGGED_PACK) {
-                ack_receive[pck_seq] = (gr::high_res_timer_now() / tpus);  // MAC2MAC
+                if(pck_seq >= 0){
+                    ack_receive[pck_seq] = (gr::high_res_timer_now() / tpus);  // MAC2MAC
+                }
             }
             return;
         } else if(dest != d_src_addr && dest != BROADCAST_ADDR ) {
@@ -270,7 +276,9 @@ public:
         if(pmt::blob_length(blob) == sizeof(SaveStatsSignal)){
             SaveStatsSignal* app_pkt = (SaveStatsSignal*)pmt::blob_data(blob);
             if(app_pkt->SaveStatsIdentifier == SAVE_STATS_SYMBOL){
-                saveStats();
+                printf("timer start\n");
+                d_save_stats = 1;
+                d_save_stats_timer = gr::high_res_timer_now();
                 return;
             }
         }
@@ -352,12 +360,11 @@ private:
     uint32_t    d_slotframe = 0;
     uint8_t     d_current_position;
     uint8_t     d_num_timeslot_per_superframe;
-    uint8_t		d_retransmission_attempt = 2;
+    uint8_t		d_retransmission_attempt = 1;
     uint16_t    d_old_queue_size = 0;
     uint64_t 	mac_to_app[MAX_NUM_LOGGED_PACK];
     uint64_t 	ack_receive[MAX_NUM_LOGGED_PACK];
     long long int 	d_last_pack_recieved = 0;
-    long long int 	rtt_start;
     uint64_t 	mac_send[MAX_NUM_LOGGED_PACK];
     uint64_t 	app_to_mac[MAX_NUM_LOGGED_PACK];
     uint64_t    d_packet_sent_counter;
@@ -365,6 +372,8 @@ private:
     long long int 	mac_wait_start;
     long long int tpus = (gr::high_res_timer_tps() / 1000000);
     std::vector<queueMeasureElement>	queueValues;
+    uint8_t d_save_stats = 0;
+    long long int d_save_stats_timer;
     //aoiMeasurementElement	aoiValues[10000];
 
 
@@ -488,7 +497,7 @@ private:
                 return appSeq;
             }
         }
-        return 0;
+        return -1;
     }
 
     void extract_beacon_info(BeaconPacket* beacon_packet) {
@@ -527,12 +536,13 @@ private:
 
         // FCF
         // data frame, no security
-        if((mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
-            tx_pkt.frameControlField = d_fcf | 0x0020;
-        }
-        else {
-            tx_pkt.frameControlField = d_fcf;
-        }
+        // if((mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
+        //     tx_pkt.frameControlField = d_fcf | 0x0020;
+        // }
+        // else {
+        //     tx_pkt.frameControlField = d_fcf;
+        // }
+        tx_pkt.frameControlField = d_fcf;
 
         // seq nr
         tx_pkt.MACSeqNum = d_seq_nr++;
