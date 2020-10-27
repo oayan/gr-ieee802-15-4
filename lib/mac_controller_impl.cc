@@ -28,6 +28,8 @@
 #include <fstream>
 #include <time.h>
 
+#define SEND_SINGLE_BYTE false
+
 // a container type to collect the arrival time (timeslot) of a packet
 // struct measurementElement {
 //     uint8_t  controller_num;  // identification number of controller-plant pair
@@ -134,9 +136,10 @@ public:
                         // send packet
                         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                          pmt::make_blob((char*)(&d_beacon_str), sizeof(d_beacon_str))));
-                        // TODO This should be redundant in radio !!!!!!!!!!!!!
-                        // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-                        //                  pmt::make_blob("1", 1)));
+                        if(SEND_SINGLE_BYTE){
+                             message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                                              pmt::make_blob("1", 1)));
+                        }
                         // TODO: remove if not necessary !!!!!!!!!!!!!!!!!!!
                         // TODO save stats
                         // if(d_cnt_timeslot - d_last_received_ts_num > 750 & d_last_received_ts_num != 0) {
@@ -254,7 +257,10 @@ public:
 
         message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                   pmt::make_blob((char*)(&tx_pkt), sizeof(tx_pkt))));
-        //TODO REMOVE THIS FOR USRP usage !!!!!!!!!!
+        if(SEND_SINGLE_BYTE){
+            message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                pmt::make_blob("1", 1)));
+        }
         // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
         //             pmt::make_blob("1", 1)));
 
@@ -314,9 +320,10 @@ public:
 
       message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                         pmt::make_blob((char*)(&ack_pkt), sizeof(ack_pkt))));
-      // TODO this should be redundant with USRP !!!!!!!!!!!!!!!!!
-      // message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
-      //                  pmt::make_blob("1", 1)));
+    if(SEND_SINGLE_BYTE){
+        message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
+                        pmt::make_blob("1", 1)));
+      }
     }
 
     void generate_update_beacon_mac() {

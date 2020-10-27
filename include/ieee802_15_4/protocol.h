@@ -1,6 +1,6 @@
-/* -*- c++ -*- */
 /*
- * Copyright 2020 TUM LKN.
+ * Copyright (C) 2020 Hasan Yagiz Özkan <yagiz.oezkan@tum.de>
+ *               2020 Onur Ayan <onur.ayan@tum.de>
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -35,6 +35,7 @@
 #define BITS_IN_BYTE 8
 #define MAX_NUM_LOGGED_PACK 10000
 #define QUEUE_SIZE 5
+#define MAX_RETRANSMISSION_ATTEMPT 1
 
 using namespace gr::ieee802_15_4;
 
@@ -360,7 +361,7 @@ private:
     uint32_t    d_slotframe = 0;
     uint8_t     d_current_position;
     uint8_t     d_num_timeslot_per_superframe;
-    uint8_t		d_retransmission_attempt = 1;
+    uint8_t		d_retransmission_attempt = MAX_RETRANSMISSION_ATTEMPT;
     uint16_t    d_old_queue_size = 0;
     uint64_t 	mac_to_app[MAX_NUM_LOGGED_PACK];
     uint64_t 	ack_receive[MAX_NUM_LOGGED_PACK];
@@ -535,13 +536,13 @@ private:
         PlantToControllerPacket tx_pkt;
 
         // FCF
-        // data frame, no security
-        // if((mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
-        //     tx_pkt.frameControlField = d_fcf | 0x0020;
-        // }
-        // else {
-        //     tx_pkt.frameControlField = d_fcf;
-        // }
+        data frame, no security
+        if(d_retransmission_attempt !=1 && (mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
+            tx_pkt.frameControlField = d_fcf | 0x0020;
+        }
+        else {
+            tx_pkt.frameControlField = d_fcf;
+        }
         tx_pkt.frameControlField = d_fcf;
 
         // seq nr
