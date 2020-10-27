@@ -536,7 +536,7 @@ private:
         PlantToControllerPacket tx_pkt;
 
         // FCF
-        data frame, no security
+        // data frame, no security
         if(d_retransmission_attempt !=1 && (mQueuingStrategy == QueuingStrategies::FCFS_TailDrop) || (mQueuingStrategy == QueuingStrategies::LCFS_PacketDiscard) || (mQueuingStrategy == QueuingStrategies::FCFS_FrontDrop)) {
             tx_pkt.frameControlField = d_fcf | 0x0020;
         }
