@@ -15,7 +15,7 @@ This module uses *maint-3.7* branch for development. This branch is supposed to 
 
 - Flexible slotted superframe is created by MAC-Controller block.
 - Synchronization is provided by regular beacon packets, which are originated from MAC-Controller block.
-- Different queuing strategies are implemented to MAC-Plant block.
+- Different queuing strategies in MAC-Plant block.
 - An example control application with inverted pendulum, which consist of 
 controller and plant applications can be found in inverted_pendulum_gui file.
 - The O-QPSK PHY encapsulated in a hierarchical block.
@@ -52,12 +52,12 @@ for installation instructions.
 ## Usage
 
 - The structure of the superframe can be controlled from MAC-Controller block.
-- The duration of a timeslot, the number of the timeslots inside a superframe are variable.
+- The duration of a timeslot, the number of the timeslots inside a superframe are variable. They can be chosen from GRC.
 - Controller application should be connected with the flowgraph with MAC-Controller block through UDP.
 - Plant application should be connected with the flowgraph with MAC-Plant block through UDP.
-- The number of plants should be defined correctly to allocate timeslots for each plant.
-- The maximum number of timeslot in a superframe is 32 and first timeslot of every superframe is reserved for beacon packet.
-- The number of retransmission attempts can be changed from mac_plant_impl.cc. If maximum retransmission number is more than 1 ACK packet will be activated.
+- The number of plants should be defined correctly in order to allocate timeslots for each plant.
+- Maximum number of timeslots in a superframe is 32 and first timeslot of every superframe is reserved for beacon packet.
+- The number of retransmission attempts can be changed from mac_plant_impl.cc. If maximum retransmission number is more than 1, ACK packet will be sent by the controller.
 
 Open the `examples/transceiver_*.grc` flow graph with gnuradio-companion and
 check if all blocks are connected. Enable either the UHD blocks to interface
