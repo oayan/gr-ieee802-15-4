@@ -18,3 +18,5 @@ examples/transceiver_CSS_USRP.py
 .idea/*
 **/.DS_Store
 .kdev4/
+*.json
+*.csv

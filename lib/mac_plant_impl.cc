@@ -36,6 +36,7 @@
 #define MAX_NUM_LOGGED_PACK 10000
 #define QUEUE_SIZE 5
 #define MAX_RETRANSMISSION_ATTEMPT 1
+#define LOG_DIRECTORY_LOCATION "workarea/gr-ieee802-15-4/inverted_pendulum_gui/Logs"
 
 using namespace gr::ieee802_15_4;
 
@@ -391,8 +392,8 @@ private:
         printf("save stats\n");
         const char *strategy;
         strategy = get_strategy_name(mQueuingStrategy);
-        char path[50];
-        sprintf(path, "workarea/gui_ncs/Logs/%s/", strategy);
+        char path[100];
+        sprintf(path, "%s/%s/",LOG_DIRECTORY_LOCATION, strategy);
         
         DIR *dir = opendir(path);
         struct dirent *entry = readdir(dir);
@@ -418,7 +419,7 @@ private:
         time_t now = time(0);
         tm *ltm = localtime(&now);
         char file_name [255];
-        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACRtt.csv", strategy, current_num, d_plant_id);
+        sprintf(file_name,"%s/%s/Measurement_%d/Loop_%d/MACRtt.csv", LOG_DIRECTORY_LOCATION, strategy, current_num, d_plant_id);
         tmpfile.open (file_name);
         if(!tmpfile) {
             printf("could not opened\n");
@@ -428,7 +429,7 @@ private:
             app_to_mac[i] = mac_send[i] = ack_receive[i] = mac_to_app[i] = 0;
         }
         tmpfile.close();
-        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACqueue.csv", strategy, current_num, d_plant_id);
+        sprintf(file_name,"%s/%s/Measurement_%d/Loop_%d/MACqueue.csv", LOG_DIRECTORY_LOCATION, strategy, current_num, d_plant_id);
         tmpfile.open (file_name);
         while(!queueValues.empty()) {
             struct queueMeasureElement toWrite = queueValues[0];
@@ -437,7 +438,7 @@ private:
         }
         tmpfile.close();
         printf("write received and sent\n");
-        sprintf(file_name,"workarea/gui_ncs/Logs/%s/Measurement_%d/Loop_%d/MACsent_received.csv", strategy, current_num, d_plant_id);
+        sprintf(file_name,"%s/%s/Measurement_%d/Loop_%d/MACsent_received.csv", LOG_DIRECTORY_LOCATION, strategy, current_num, d_plant_id);
         tmpfile.open (file_name);
         tmpfile << d_packet_sent_counter << "," << d_packet_received_counter << std::endl;
         d_packet_sent_counter = d_packet_received_counter = 0;
