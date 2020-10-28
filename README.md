@@ -58,7 +58,7 @@ for installation instructions.
 - The number of plants should be defined correctly in order to allocate timeslots for each plant.
 - Maximum number of timeslots in a superframe is 32 and first timeslot of every superframe is reserved for beacon packet.
 - The number of retransmission attempts can be changed from mac_plant_impl.cc. If maximum retransmission number is more than 1, ACK packet will be sent by the controller.
-- LOG_DIRECTORY_LOCATION definition in the mac_plant_impl.cc should be selected correctly to save measurements of GNU Radio.  
+- LOG_DIRECTORY_LOCATION definition in the mac_plant_impl.cc should be same as log directory of the application to save measurements of GNU Radio.  
 
 Open the `examples/transceiver_*.grc` flow graph with gnuradio-companion and
 check if all blocks are connected. Enable either the UHD blocks to interface
