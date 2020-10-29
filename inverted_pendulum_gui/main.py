@@ -150,7 +150,11 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         try:
             last_log = 0
             if not os.path.exists(self.folder_path + config.get_strategy_abbreviation()):
-                os.makedirs(self.folder_path + config.get_strategy_abbreviation())
+                try:
+                    os.makedirs(self.folder_path + config.get_strategy_abbreviation())
+                except:
+                    print("Folder could not be created!")
+                    exit(1)
             p = Path(self.folder_path + config.get_strategy_abbreviation())
             for folder in p.iterdir():
                 if folder.is_dir():

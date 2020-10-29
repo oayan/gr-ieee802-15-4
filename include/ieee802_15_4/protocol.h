@@ -69,7 +69,7 @@ struct BeaconPacket {
     uint16_t srcAddr;
     uint8_t numTimeslotPerSuperframe;
     uint16_t timeslotDur;
-    uint8_t schedule[31];
+    uint8_t schedule[32];
     uint32_t timeslotNum;
     uint16_t crc;
 };
