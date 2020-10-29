@@ -149,6 +149,8 @@ class ApplicationWindow(QtWidgets.QMainWindow):
     def create_log_folders(self):
         try:
             last_log = 0
+            if not os.path.exists(self.folder_path + config.get_strategy_abbreviation()):
+                os.makedirs(self.folder_path + config.get_strategy_abbreviation())
             p = Path(self.folder_path + config.get_strategy_abbreviation())
             for folder in p.iterdir():
                 if folder.is_dir():
