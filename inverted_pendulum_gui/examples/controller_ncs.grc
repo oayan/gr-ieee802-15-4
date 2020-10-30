@@ -793,7 +793,7 @@
     </param>
     <param>
       <key>_enabled</key>
-      <value>1</value>
+      <value>0</value>
     </param>
     <param>
       <key>fftsize</key>
@@ -1712,7 +1712,7 @@
     </param>
     <param>
       <key>dev_addr</key>
-      <value>serial=318813E</value>
+      <value></value>
     </param>
     <param>
       <key>dev_args</key>
@@ -3047,7 +3047,7 @@
     </param>
     <param>
       <key>dev_addr</key>
-      <value>serial=318813E</value>
+      <value></value>
     </param>
     <param>
       <key>dev_args</key>
