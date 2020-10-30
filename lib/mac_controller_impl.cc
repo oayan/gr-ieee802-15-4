@@ -30,16 +30,6 @@
 
 #define SEND_SINGLE_BYTE false
 
-// a container type to collect the arrival time (timeslot) of a packet
-// struct measurementElement {
-//     uint8_t  controller_num;  // identification number of controller-plant pair
-//     uint32_t sequence;      // sequence number of the arrived packet
-//     uint32_t arrival;     // arrival time in timeslot (timeslot duration depends on d_timeslot_dur, which is received from app)
-// };
-
-// struct plantToControllerFormat {
-//
-// };
 
 using namespace gr::ieee802_15_4;
 
@@ -105,25 +95,7 @@ public:
                 boost::this_thread::sleep(boost::posix_time::microseconds(250));
 
                 gr::thread::scoped_lock(d_mutex);
-                // end of the measurements when do not receive any packet for 10 seconds
-                // TODO Save stats
-                // if(gr::high_res_timer_now() - d_last_recieved > (gr::high_res_timer_tps() * 10) && d_last_recieved != 0) {
-                //     // at the end of current measurement set d_last_receive to 0 so another received packet restarts the process
-                //     d_last_recieved = 0;
-                //     // save the measurements with time and date info
-                //     time_t now = time(0);
-                //     tm *ltm = localtime(&now);
-                //     char file_name [255];
-                //     sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACcontroller.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
-                //     std::ofstream tmpfile;
-                //     tmpfile.open (file_name);
-                //     while(!measurement.empty()) {
-                //         struct measurementElement toWrite = measurement[0];
-                //         measurement.erase(measurement.begin());
-                //         tmpfile << unsigned(toWrite.controller_num) << "," << toWrite.sequence << "," << toWrite.arrival << std::endl;
-                //     }
-                //     printf("end of controller\n");
-                // }
+
                 // check for the beginning of the timeslot
                 if(gr::high_res_timer_now() - d_tnow > d_timeslot_dur && d_slotframe_dur != 0) {
                     d_tnow = gr::high_res_timer_now();
@@ -140,23 +112,6 @@ public:
                              message_port_pub(pmt::mp("pdu out"), pmt::cons(pmt::PMT_NIL,
                                               pmt::make_blob("1", 1)));
                         }
-                        // TODO: remove if not necessary !!!!!!!!!!!!!!!!!!!
-                        // TODO save stats
-                        // if(d_cnt_timeslot - d_last_received_ts_num > 750 & d_last_received_ts_num != 0) {
-                        //     d_last_received_ts_num = 0;
-                        //     time_t now = time(0);
-                        //     tm *ltm = localtime(&now);
-                        //     char file_name [255];
-                        //     sprintf(file_name,"../../results/%d-%d-%d_%d-%d-%dMACcontroller.csv",(1900 + ltm->tm_year),(1+ltm->tm_mon), ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
-                        //     std::ofstream tmpfile;
-                        //     tmpfile.open (file_name);
-                        //     while(!measurement.empty()) {
-                        //         struct measurementElement toWrite = measurement[0];
-                        //         measurement.erase(measurement.begin());
-                        //         tmpfile << unsigned(toWrite.controller_num) << "," << toWrite.sequence << "," << toWrite.arrival << std::endl;
-                        //     }
-                        //     printf("end of controller\n");
-                        // }
                     }
                     // at the end of every timeslot update the timeslot number
                     d_cnt_timeslot++;
@@ -208,12 +163,6 @@ public:
             unsigned char buf[256];
             std::memcpy(buf, pmt::blob_data(blob), data_len);
 
-            // struct measurementElement newElement;
-            // // TODO packetToControllerFormat as struct
-            // newElement.controller_num = rx_pkt->loopID;
-            // newElement.sequence = rx_pkt->seqNum;
-            // newElement.arrival = d_cnt_timeslot;
-            // measurement.push_back(newElement);
 
             // send ACK if ACK-enabled
             if(protocol::getAckEnable(rx_pkt->frameControlField)) {
