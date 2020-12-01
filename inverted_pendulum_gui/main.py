@@ -17,24 +17,18 @@
 
 import numpy as np
 import os
-import re
-import pandas as pd
 import sys
 import config
 import time
 import json
-import shutil
+import PySide2
 from PySide2.QtCore import QThread, SIGNAL, QTimer
+from PySide2 import QtCore, QtWidgets, QtGui
 from pathlib import Path
-from matplotlib.backends.qt_compat import QtCore, QtWidgets
 
-if int(QtCore.qVersion()[0]) == 5:
-    from matplotlib.backends.backend_qt5agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-else:
-    from matplotlib.backends.backend_qt4agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-from matplotlib.figure import Figure
+# Prints PySide2 version and the Qt version used to compile PySide2
+print(f"{config.bcolors.HEADER}Using PySide2 version: {PySide2.__version__} with Qt Version {PySide2.QtCore.__version__} used for compilation{config.bcolors.ENDC}")
+
 from client import Client
 from model import InvertedPendulum
 from datetime import datetime
@@ -45,29 +39,26 @@ if config.SHOW_GUI:
 write_time = None
 RESULTS_FOLDER_PATH = "Logs/"
 
-#live plot, logging, Plant ID
-
-
-#main thread creat widgets and server and connect together
 
 class ApplicationWindow(QtWidgets.QMainWindow):
     def __init__(self):
         os.nice(20)
-        if config.SHOW_GUI:
-            super().__init__()
-        np.random.seed(int(time.time()))
 
         #set the draw_flag in widget to switch between ani and state
         if config.SHOW_GUI:
+            super().__init__()
             self._main = QtWidgets.QWidget()
             self.setCentralWidget(self._main)
             self.layout = QtWidgets.QGridLayout(self._main)
             self.setWindowState(QtCore.Qt.WindowMaximized)
+
         self.s_port = list(range(config.PLANT_SEND_PORT_START, config.PLANT_SEND_PORT_STOP))
         self.l_port = list(range(config.PLANT_LISTEN_PORT_START, config.PLANT_LISTEN_PORT_STOP))
         self.folder_path = RESULTS_FOLDER_PATH
         self.create_log_folders()
-        self.plantCnt = 0
+        self.plant_cnt = 0
+
+        # set the draw_flag in widget to switch between ani and state
         self.plantRunningFlags = 0
 
         for gridx in range(config.NUMBER_OF_LOOPS):
@@ -76,13 +67,13 @@ class ApplicationWindow(QtWidgets.QMainWindow):
                 time.sleep(0.01)
 
     def add_new_instace(self, gridx, gridy):
-        self.plantCnt += 1
-        self.plantRunningFlags = self.plantRunningFlags | (1 << self.plantCnt)
+        self.plant_cnt += 1
+        self.plantRunningFlags = self.plantRunningFlags | (1 << self.plant_cnt)
         if config.SHOW_GUI:
-            widget = InvertedPendulumWidget(parent=self, plant_id=self.plantCnt)
+            widget = InvertedPendulumWidget(parent=self, plant_id=self.plant_cnt)
             self.layout.addWidget(widget, gridx, gridy)
-        client = Client(l_port=self.l_port.pop(0), s_port=self.s_port.pop(0), plant_id=self.plantCnt)
-        model = InvertedPendulum(self.plantCnt)
+        client = Client(l_port=self.l_port.pop(0), s_port=self.s_port.pop(0), plant_id=self.plant_cnt)
+        model = InvertedPendulum(self.plant_cnt)
         if config.SHOW_GUI:
             model.Data.data.connect(widget.update_state)
         client.Data.control.connect(model.update_control, type=QtCore.Qt.DirectConnection)
@@ -186,17 +177,25 @@ class ApplicationWindow(QtWidgets.QMainWindow):
 
 
 if __name__ == "__main__":
+    np.random.seed(int(time.time()))
+
+    # Get time date time string
+    write_time = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+
     # Check whether there is already a running QApplication (e.g., if running
     # from an IDE).
-    write_time = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     qapp = QtWidgets.QApplication.instance()
     if not qapp:
         qapp = QtWidgets.QApplication(sys.argv)
 
+    # Create new 'own' ApplicationWindow instance, see above
     app = ApplicationWindow()
     if config.SHOW_GUI:
         app.show()
         app.activateWindow()
         app.raise_()
+
     app.start_sim()
+
+    # Start the event loop
     qapp.exec_()

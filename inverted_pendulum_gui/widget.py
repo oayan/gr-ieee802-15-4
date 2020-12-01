@@ -16,16 +16,17 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-from PySide2.QtCore import QThread, Signal,Slot
 
 from matplotlib.ticker import FormatStrFormatter
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
+
 if int(QtCore.qVersion()[0]) == 5:
     from matplotlib.backends.backend_qt5agg import (
         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 else:
     from matplotlib.backends.backend_qt4agg import (
         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+
 from matplotlib.figure import Figure
 from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
 
@@ -45,9 +46,10 @@ class InvertedPendulumWidget(FigureCanvas):
 
     def _update_animation(self):
         try:
-            self.mass1.set_data(self.state4plot[0],0)
-            self.mass2.set_data(self.state4plot[1],self.state4plot[2])
-            self.line.set_data([self.state4plot[0],self.state4plot[1]],[0,self.state4plot[2]])
+            # TODO Please check these & Comment & Improve
+            self.mass1.set_data(self.state4plot[0], 0)
+            self.mass2.set_data(self.state4plot[1], self.state4plot[2])
+            self.line.set_data([self.state4plot[0], self.state4plot[1]], [0, self.state4plot[2]])
             self._animation_ax.figure.canvas.draw()
 
         except:
@@ -68,18 +70,16 @@ class InvertedPendulumWidget(FigureCanvas):
         except:
             pass
 
-    def start(self,fps=30):
-        #target function for thread.
+    def start(self, fps=30):
 
         #drawing
-        if self.draw_flag ==0:
+        if self.draw_flag == GUIShowType.animation:
             update = self._update_animation
-        elif self.draw_flag ==1:
+        elif self.draw_flag == GUIShowType.realtime_plot:
             update = self._update_static_plot
-        self._timer = self.new_timer(
-            1000/fps, [(update, (), {})])
-        self._timer.start()
 
+        self._timer = self.new_timer(1000/fps, [(update, (), {})])
+        self._timer.start()
 
     def _init_animation(self, plant_id):
         try :
@@ -124,14 +124,16 @@ class InvertedPendulumWidget(FigureCanvas):
         # self._state_ax2.set_ylim(-0.02,0.02)
 
 
-    def update_state(self,data):
+    def update_state(self, data):
         time_step, state = data
-        time_step = time_step / 100
+        time_step = time_step / 100     # TODO ? * SAMPLING_PERIOD?
         try:
             self.state = np.append(self.state, [state], axis=0)
             self.state4plot = self.state2coord(state)
             self.time_step = np.append(self.time_step, [time_step], axis=0)
+
         except:
+            # TODO ?
             self.state = [state]
             self.state4plot = self.state2coord(state)
             self.time_step = [time_step]
