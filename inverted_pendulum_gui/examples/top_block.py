@@ -108,7 +108,7 @@ class top_block(gr.top_block, Qt.QWidget):
         self.uhd_usrp_sink_0.set_normalized_gain(tx_gain, 0)
         self.ieee802_15_4_rime_stack_0 = ieee802_15_4.rime_stack(([129]), ([131]), ([132]), ([23,42]))
         self.ieee802_15_4_oqpsk_phy_0 = ieee802_15_4_oqpsk_phy()
-        self.ieee802_15_4_mac_controller_0 = ieee802_15_4.mac_controller(False,0x8841,0,0x1aaa,10,3,10,False,0,0)
+        self.ieee802_15_4_mac_controller_0 = ieee802_15_4.mac_controller(False,0x8841,0,0x1aaa,10,3,10,True,0,0)
         self.ieee802_15_4_csma_0 = ieee802_15_4.csma()
         self.fft_filter_xxx_0 = filter.fft_filter_ccc(1, (channel_filter), 1)
         self.fft_filter_xxx_0.declare_sample_delay(0)

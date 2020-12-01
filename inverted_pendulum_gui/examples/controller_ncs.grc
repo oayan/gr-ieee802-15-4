@@ -741,7 +741,7 @@
     <key>ieee802_15_4_mac_controller</key>
     <param>
       <key>beacon_enable</key>
-      <value>False</value>
+      <value>True</value>
     </param>
     <param>
       <key>alias</key>

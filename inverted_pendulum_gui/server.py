@@ -22,54 +22,8 @@ from protocol import Protocol
 from controller import Controller
 import errno
 from time import sleep
+import select
 
-
-def return_control_signal(data, send_sock, SEND_PORT, controller):
-    loop_id, seq_num, x = data
-    IP = "127.0.0.1"
-
-    u = controller.get_control_input(x, seq_num)
-
-    msg = Protocol.encode_control(loop_id, seq_num, u)
-    send_sock.sendto(msg, (IP, SEND_PORT))
-
-
-def controller_thread(l_port, s_port):
-    IP = "127.0.0.1"    # localhost
-
-    thread_yield_duration_s = 0.0002    # see usage in the while loop, i.e., (sleep(thread_yield_duration_s))
-
-    l_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)    # UDP Listener Socket
-    l_sock.setblocking(False)
-    l_sock.bind((IP, l_port))
-
-    s_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)    # UDP Sender Socket
-    s_sock.setblocking(False)
-
-    print('Controller Thread {} started >> Listening to port {}, sending to port {}.\n'.format(server_id,
-                                                                                               PORTS[PortPair.listenPort],
-                                                                                               PORTS[PortPair.sendPort]))
-    controller = Controller()
-
-    while True:
-        try:
-            data, addr = l_sock.recvfrom(1024)      # buffer size is 1024 bytes
-            data = Protocol.decode_state(data)
-        except socket.error as e:
-            err = e.args[0]
-            if err == errno.EAGAIN or err == errno.EWOULDBLOCK:
-                # No data available, yield thread to other threads
-                sleep(thread_yield_duration_s)  # TODO Check if this affects a lot?!
-                continue
-            else:
-                # a "real" error occurred
-                print("Server socket error: {}\n".format(e))
-                sleep(1)
-                sys.exit(1)
-
-        t = threading.Thread(target=return_control_signal,
-                             args=[data, s_sock, s_port, controller])
-        t.start()
 
 
 class PortPair:
@@ -77,15 +31,72 @@ class PortPair:
     sendPort = 1
 
 
+class ControlLoopServer:
+    addr = '127.0.0.1'
+    id = 0
+    controller = Controller()
+
+    def __init__(self, listen_port, send_port):
+        ControlLoopServer.id += 1
+
+        self.l_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)      # UDP Listener Socket
+        self.l_port = listen_port
+        self.s_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP Listener Socket
+        self.s_port = send_port
+
+
+        print(f'Server {ControlLoopServer.id} started >> Listening to port {l_port}, '
+              f'sending to port {s_port}.\n')
+
+    def bind_to_listen_port(self):
+        self.l_sock.bind(('127.0.0.1', self.l_port))
+
+
+def run(control_loop_servers):
+
+    listener_sockets = {}
+    sender_sockets = {}
+
+    for cls in control_loop_servers:
+        cls.bind_to_listen_port()
+        listener_sockets[cls.l_sock] = cls
+        sender_sockets[cls.s_sock] = cls
+
+
+    while True:
+        # Await a read event
+        rlist, _, _ = select.select([*listener_sockets], [], [], 5)
+
+        # Test for timeout
+        if rlist == []:
+            print('.')
+            continue
+        elif rlist:
+            #t = time.time()
+            _, wlist, _ = select.select([], [*sender_sockets], [], 5)
+            # Loop through each socket in rlist, read and print the available data
+            for sock in rlist:
+                cls = listener_sockets[sock]
+                if cls.s_sock in wlist:
+                    data, addr = sock.recvfrom(100)  # buffer size is 100 bytes
+                    loop_id, seq_num, x = Protocol.decode_state(data)
+                    u = ControlLoopServer.controller.get_control_input(x, seq_num)
+
+                    msg = Protocol.encode_control(loop_id, seq_num, u)
+                    cls.s_sock.sendto(msg, (ControlLoopServer.addr, cls.s_port))
+                    #print(time.time() - t)
+
+
 if __name__ == "__main__":
-    S_PORT = list(range(config.CONTROLLER_SEND_PORT_START, config.CONTROLLER_SEND_PORT_STOP))
-    L_PORT = list(range(config.CONTROLLER_LISTEN_PORT_START, config.CONTROLLER_LISTEN_PORT_STOP))
-    for server_id, PORTS in enumerate(zip(L_PORT, S_PORT)):
-        print('Server {} started >> Listening to port {}, sending to port {}.\n'.format(server_id,
-                                                                                      PORTS[PortPair.listenPort],
-                                                                                      PORTS[PortPair.sendPort]))
+    control_loop_servers = []
+    s_ports = list(range(config.CONTROLLER_SEND_PORT_START, config.CONTROLLER_SEND_PORT_STOP))
+    l_ports = list(range(config.CONTROLLER_LISTEN_PORT_START, config.CONTROLLER_LISTEN_PORT_STOP))
 
-        t = threading.Thread(target=controller_thread, args=PORTS)
-        t.start()
-        sleep(0.1)
+    for server_id, ports in enumerate(zip(l_ports, s_ports)):
+        l_port = ports[PortPair.listenPort]
+        s_port = ports[PortPair.sendPort]
 
+        control_loop_servers.append(ControlLoopServer(listen_port=l_port, send_port=s_port))
+
+    sleep(0.5)
+    run(control_loop_servers)
