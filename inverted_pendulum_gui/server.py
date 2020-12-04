@@ -37,7 +37,8 @@ class ControlLoopServer:
     controller = Controller()
 
     def __init__(self, listen_port, send_port):
-        ControlLoopServer.id += 1
+
+        ControlLoopServer.id += 1   # Be careful here: LoopIds might not be in the same order with socket creating
 
         self.l_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)      # UDP Listener Socket
         self.l_port = listen_port
