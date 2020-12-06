@@ -93,7 +93,7 @@ async def main():
     p = InvertedPendulumProcess()
     await asyncio.gather(p.run(), p.wait_for_received_packet())
 
-asyncio.run(main())
+#asyncio.run(main())
 
 
 
