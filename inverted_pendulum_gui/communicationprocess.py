@@ -1,13 +1,14 @@
 from multiprocessing import Process, Queue
-import time
 from protocol import Protocol, P2C_PACKET_SIZE_bytes
-
 import select
 import socket
 from config import NUMBER_OF_LOOPS as N
 import config
 import collections
 from queue import Empty
+import logging
+import sys
+import struct
 
 
 class CPSocket(socket.socket):
@@ -21,11 +22,11 @@ class ControlProcessHandler:
         self.loop_id = _loop_id
         self.l_port = _l_port
         self.s_port = _s_port
-        self.s_ip = None # TODO FILL THIS !
         self.to_ctrl_pipe = _pipe
 
         self.l_sock = CPSocket(self)      # UDP Listener Socket
         self.s_sock = CPSocket(self)      # UDP Sender Socket
+
 
     def bind_to_listen_port(self):
         self.l_sock.bind(('127.0.0.1', self.l_port))
@@ -42,13 +43,18 @@ class CommunicationProcess(Process):
      -- a queue to write: N control processes-- 1 x queue --> 1 communication process
      -- N pipes to read: 1 communication process -- N x pipes --> N control processes
     """
-    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_pipes: dict):
-        super().__init__(target=self.run, args=(None,))
+    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_pipes: dict, cpu_bound: bool = True):
+        if cpu_bound:
+            run = self.run
+        else:
+            #TODO asyncio implementation
+            self.print('asyncio implementation!')
+            sys.exit(1)
 
+        super().__init__(target=run, args=(None,))
         self.from_control_queue = _ctrl_to_comm_queue
         self.to_control_pipes = _comm_to_ctrl_pipes
 
-        # TODO for each key in pipes, create an handler below with the correct socket (read from config accordingly)
         # Create ports for sockets
         # Communication process decides which socket belongs to which loop. Not the main anymore!
         s_ports = collections.deque(range(config.PLANT_SEND_PORT_START, config.PLANT_SEND_PORT_STOP))
@@ -87,26 +93,49 @@ class CommunicationProcess(Process):
             rlist, _, _ = select.select(listener_sockets, [], [], 0)
 
             for sock in rlist:
-                data, addr = sock.recvfrom(100)  # buffer size is 100 bytes, should not block due to select
-                loop_id, _, _ = Protocol.decode_control(data)
-                assert (loop_id == sock.ctrl_proc_handler.loop_id)
-                cph = sock.ctrl_proc_handler[loop_id]
-                # TODO deliver this packet to the corresponding loop through cph's pipe
+                try:
+                    data, addr = sock.recvfrom(128)     # buffer size is 128 bytes, should not block due to select
+                    loop_id, _, _ = Protocol.decode_control(data)   # extract loop_id out of packet
+                    assert (loop_id == sock.ctrl_proc_handler.loop_id)  # make sure that loop_id matches socket's
+                    cph = sock.ctrl_proc_handler[loop_id]   # get handler of the control process matching loop_id
+                    cph.to_ctrl_pipe.send(data)             # forward packet via correct pipe towards control process
+                except socket.timeout as err:
+                    logging.error(err)
+                    self.print("This should not happen, check implementation!")
+                    continue
+
+                except socket.error as err:
+                    logging.error(err)
+                    sys.exit(1)
+
+                except struct.error as err:
+                    print(err)
+                    self.print(f"decode_control() failed due to unknown data: {data}")
+                    continue
+                else:
+                    print("Unknown error while unpacking!")
+                    sys.exit(1)
 
             # Consume outgoing packets from the queue
             try:
                 msg = self.from_control_queue.get_nowait()
                 loop_id, _, _ = Protocol.decode_state()
                 cph = self.ctrl_proc_handlers[loop_id]
-                # TODO ip is still None
-                tx_bytes = self.ctrl_proc_handlers[loop_id].s_sock.sendto(msg, (cph.s_ip, cph.s_port))
+                sock = self.ctrl_proc_handlers[loop_id].s_sock
+                tx_bytes = sock.sendto(msg, ('127.0.0.1', cph.s_port))   # GNURadio is running on the same machine
 
                 if tx_bytes != P2C_PACKET_SIZE_bytes:
                     print(f"{config.bcolors.WARNING}'TX Bytes not matching'{config.bcolors.ENDC}")
                     self.from_control_queue.put(msg)    # Put packet back to the queue since it could not be sent
 
             except Empty:
-                pass
+                continue
+
+            except struct.error as err:
+                print(err)
+                self.print(f"decode_state() failed due to unknown data: {data}")
+                continue
+
             else:
                 print('Unexpected Error')
                 raise
@@ -139,6 +168,7 @@ class CommunicationProcess(Process):
 
 
 if __name__ == '__main__':
+    CommunicationProcess.print("Run from main_plant.py")
     exit(1)
 
     # p_queue = Queue()
