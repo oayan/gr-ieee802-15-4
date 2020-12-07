@@ -27,7 +27,6 @@ class ControlProcessHandler:
         self.l_sock = CPSocket(self)      # UDP Listener Socket
         self.s_sock = CPSocket(self)      # UDP Sender Socket
 
-
     def bind_to_listen_port(self):
         self.l_sock.bind(('127.0.0.1', self.l_port))
 

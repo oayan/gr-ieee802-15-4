@@ -32,14 +32,17 @@ from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
 
 
 class InvertedPendulumWidget(FigureCanvas):
-
-    def __init__(self, plant_id, parent=None, width=5, height=4, dpi=100):
+    """
+    This is the widget illustrating an inverted pendulum. Each control loop is drawn by this widget.
+    N widgets are added to the application window while creating the GUI process.
+    """
+    def __init__(self, _loop_id, parent=None, width=5, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
 
-        self.draw_flag = GUI_TYPE  #0 for animation , 1 for state
+        self.draw_flag = GUI_TYPE  # 0 for animation , 1 for 2D-plot
 
         if self.draw_flag == GUIShowType.animation:
-            self._init_animation(plant_id)
+            self._init_animation(_loop_id)
         elif self.draw_flag == GUIShowType.realtime_plot:
             self._init_static_plot()
         super().__init__(self.fig)
