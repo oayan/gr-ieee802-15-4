@@ -30,6 +30,7 @@ else:
 
 from matplotlib.figure import Figure
 from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS, inv_pend_color_it, SAMPLING_PERIOD_S
+from config import LENGTH_OF_THE_PENDULUM
 
 
 class InvertedPendulumWidget(FigureCanvas):
@@ -55,13 +56,16 @@ class InvertedPendulumWidget(FigureCanvas):
         super().__init__(self.fig)
 
     def update_animation(self):
+        """ This method is called by the parent widget (ApplicationWindow) to trigger a drawing update.
+         State4plot should contain the relevant coordinates of the state elements
+          relative to the canvas' coordinate system."""
         try:
-            # TODO Please check these & Comment & Improve
-            self.mass1.set_data(self.state4plot[0], 0)
-            self.mass2.set_data(self.state4plot[1], self.state4plot[2])
-            self.line.set_data([self.state4plot[0], self.state4plot[1]], [0, self.state4plot[2]])
+            # Cart's marker data x, y coordinates (y coordinate is always zero for the cart)
+            self.cart_marker.set_data(self.state4plot[0], 0)
+            # Pendulum head's marker data x, y coordinates
+            self.pendulum_marker.set_data(self.state4plot[1], self.state4plot[2])
+            self.pendulum_line.set_data([self.state4plot[0], self.state4plot[1]], [0, self.state4plot[2]])
             self._animation_ax.figure.canvas.draw()
-
         except:
             pass
 
@@ -111,16 +115,19 @@ class InvertedPendulumWidget(FigureCanvas):
         # Draw Inverted Pendulum
         loop_color = next(inv_pend_color_it)
 
-        self.mass1, = self._animation_ax.plot([], [], linestyle='None', marker='s',
-                                              markersize=40, markeredgecolor='k',
-                                              color=loop_color, markeredgewidth=2)
+        # Square marker for the cart
+        self.cart_marker, = self._animation_ax.plot([], [], linestyle='None', marker='s',
+                                                    markersize=40, markeredgecolor='k',
+                                                    color=loop_color, markeredgewidth=2)
 
-        self.mass2, = self._animation_ax.plot([], [], linestyle='None', marker='o',
-                                              markersize=20, markeredgecolor='k',
-                                              color=loop_color, markeredgewidth=2)
+        # Round marker for the head of the pendulum
+        self.pendulum_marker, = self._animation_ax.plot([], [], linestyle='None', marker='o',
+                                                        markersize=20, markeredgecolor='k',
+                                                        color=loop_color, markeredgewidth=2)
 
-        self.line, = self._animation_ax.plot([], [], 'o-', color=loop_color, lw=4,
-                                             markersize=6, markeredgecolor='k', markerfacecolor='k')
+        # Line for the pendulum's body
+        self.pendulum_line, = self._animation_ax.plot([], [], 'o-', color=loop_color, lw=4,
+                                                      markersize=6, markeredgecolor='k', markerfacecolor='k')
 
         # time_template = 'time = %.1fs'    # TODO remove
         # time_text = self._animation_ax.text(0.05,0.9,'',transform=self._animation_ax.transAxes)
@@ -150,7 +157,6 @@ class InvertedPendulumWidget(FigureCanvas):
         else:
             self.parent_widget.print(f'Out of order packet for loop {self.loop_id}')
 
-
     # def update_state(self, time_step: int, state) -> bool:
     #     #time_step, state = data
     #     real_time_s = time_step * SAMPLING_PERIOD_S
@@ -167,15 +173,24 @@ class InvertedPendulumWidget(FigureCanvas):
     #         self.time_step = [time_step]
     #         return True
 
+    def _get_cart_coordinate_x(self) -> float:
+        return self.freshest_state[PlantStates.cart_position, 0]
+    
+    def _get_pendulum_head_coordinate_x(self) -> float:
+        # phi positive in counterclockwise
+        return -LENGTH_OF_THE_PENDULUM * np.sin(self.freshest_state[PlantStates.pendulum_angle, 0]) + self._get_cart_coordinate_x()
+
+    def _get_pendulum_head_coordinate_y(self) -> float:
+        return LENGTH_OF_THE_PENDULUM * np.cos(self.freshest_state[PlantStates.pendulum_angle, 0])
+
     @staticmethod
-    def state2coord(state, length=0.5):
+    def state2coord(state, length=0.2):
         x = state[PlantStates.cart_position]
         phi = state[PlantStates.pendulum_angle]
-        x0 = x
-        x1 = -length * np.sin(phi) + x
-        y1 = length * np.cos(phi)
-        # TODO Isn't there a +x for y1 ?
-        state4plot = [x0, x1, y1]
+        x_cart = x
+        x_pendulum_head = -length * np.sin(phi) + x
+        y_pendulum_head = length * np.cos(phi)
+        state4plot = [x_cart, x_pendulum_head, y_pendulum_head]
         return state4plot
 
 
