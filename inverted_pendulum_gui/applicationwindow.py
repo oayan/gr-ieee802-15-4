@@ -17,15 +17,15 @@ from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
 
 class ApplicationWindow(QtWidgets.QMainWindow):
     def __init__(self, num_loops: int):
-
         super().__init__()
-        self._main = QtWidgets.QWidget()
-        self.setCentralWidget(self._main)
-        self.layout = QtWidgets.QGridLayout(self._main)
-        self.setWindowState(QtCore.Qt.WindowMaximized)
+
+        self._main = QtWidgets.QWidget()    # Create a main widget
+        self.setCentralWidget(self._main)   # Sets the given widget to be the main windows's central widget
+        self.layout = QtWidgets.QGridLayout(self._main)     # Create a QGridLayout with the main widget as parent
+        self.setWindowState(QtCore.Qt.WindowMaximized)      # Set window size to full screen
+
         self.N = num_loops
-        self.widgets = []
-        # set the draw_flag in widget to switch between ani and state
+        self.widgets = {}
         self.plantRunningFlags = 0
 
         loop_id = 0
@@ -45,9 +45,16 @@ class ApplicationWindow(QtWidgets.QMainWindow):
 
         widget = InvertedPendulumWidget(parent=self, _loop_id=loop_id)
         self.layout.addWidget(widget, gridx, gridy)
-        self.widgets.append(widget)
+        assert (loop_id not in self.widgets)
+        self.widgets[loop_id] = widget
 
+    def update_widget(self, loop_id: int, time_step: int, state) -> None:
+        w = self.widgets[loop_id]
+        w.update_state(time_step, state)
 
+    def render(self):
+        for _, w in self.widgets.items():
+            w.update_animation()
 
     def exit_model(self, p_id):
         if self.plantRunningFlags & (1 << p_id):

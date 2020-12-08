@@ -19,6 +19,7 @@ import numpy as np
 
 from matplotlib.ticker import FormatStrFormatter
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
+import logging
 
 if int(QtCore.qVersion()[0]) == 5:
     from matplotlib.backends.backend_qt5agg import (
@@ -28,7 +29,7 @@ else:
         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 
 from matplotlib.figure import Figure
-from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
+from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS, inv_pend_color_it, SAMPLING_PERIOD_S
 
 
 class InvertedPendulumWidget(FigureCanvas):
@@ -37,17 +38,23 @@ class InvertedPendulumWidget(FigureCanvas):
     N widgets are added to the application window while creating the GUI process.
     """
     def __init__(self, _loop_id, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
-
+        self.fig = Figure(figsize=(width, height), dpi=dpi)     # Matplotlib Figure
+        self.parent_widget = parent
+        self.loop_id = _loop_id
         self.draw_flag = GUI_TYPE  # 0 for animation , 1 for 2D-plot
+        self.freshest_timestep = -1
+        self.freshest_state = np.zeros(shape=(4, 1))
+        self.state4plot = []
 
         if self.draw_flag == GUIShowType.animation:
-            self._init_animation(_loop_id)
+            self._init_animation()
+            self.update_state = self.update_state_anim
         elif self.draw_flag == GUIShowType.realtime_plot:
             self._init_static_plot()
+            self.update_state = self.update_state_2d
         super().__init__(self.fig)
 
-    def _update_animation(self):
+    def update_animation(self):
         try:
             # TODO Please check these & Comment & Improve
             self.mass1.set_data(self.state4plot[0], 0)
@@ -73,40 +80,49 @@ class InvertedPendulumWidget(FigureCanvas):
         except:
             pass
 
-    def start(self, fps=30):
+    # def start(self, fps=30):
+    #     if self.draw_flag == GUIShowType.animation:
+    #         update = self._update_animation
+    #     elif self.draw_flag == GUIShowType.realtime_plot:
+    #         update = self._update_static_plot
+    #     else:
+    #         logging.error("Unknown GUI Type")
+    #         raise TypeError
+    #
+    #     self._timer = self.new_timer(1000/fps, [(update, (), {})])
+    #     self._timer.start()
 
-        #drawing
-        if self.draw_flag == GUIShowType.animation:
-            update = self._update_animation
-        elif self.draw_flag == GUIShowType.realtime_plot:
-            update = self._update_static_plot
-
-        self._timer = self.new_timer(1000/fps, [(update, (), {})])
-        self._timer.start()
-
-    def _init_animation(self, plant_id):
-        try :
+    def _init_animation(self):
+        try:
+            # TODO redundant I believe
             self._state_ax.remove()
             self._state_ax2.remove()
         except:
             pass
+
         self._animation_ax = self.fig.add_subplot(111, autoscale_on=False, xlim=(-1., 1), ylim=(-0.4, 1.2))
-        self._animation_ax.set_xlabel('position')
+        self._animation_ax.set_xlabel('Cart Position [m]')
         self._animation_ax.get_yaxis().set_visible(False)
 
-        crane_rail, = self._animation_ax.plot([-10,10],[-0,-0],'k-',lw=4)
+        # crane_rail, = self._animation_ax.plot([-10,10],[-0,-0],'k-',lw=4)
         # start, = self._dynamic_ax.plot([-1,-1],[-1.5,1.5],'k:',lw=2)
-        # ref, = self._dynamic_ax.plot([0,0],[-0.5,1.5],'k:',lw=2)
-        self.mass1, = self._animation_ax.plot([],[],linestyle='None',marker='s',\
-                        markersize=40,markeredgecolor='k',\
-                        color=INVERTED_PENDULUM_COLOURS[plant_id-1],markeredgewidth=2)
-        self.mass2, = self._animation_ax.plot([],[],linestyle='None',marker='o',\
-                        markersize=20,markeredgecolor='k',\
-                        color=INVERTED_PENDULUM_COLOURS[plant_id-1],markeredgewidth=2)
-        self.line, = self._animation_ax.plot([],[],'o-',color=INVERTED_PENDULUM_COLOURS[plant_id-1],lw=4,\
-                        markersize=6,markeredgecolor='k',\
-                        markerfacecolor='k')
-        # time_template = 'time = %.1fs'
+        # ref, = self._dynamic_ax.plot([0,0],[-0.5,1.5],'k:',lw=2)  # TODO Remove
+
+        # Draw Inverted Pendulum
+        loop_color = next(inv_pend_color_it)
+
+        self.mass1, = self._animation_ax.plot([], [], linestyle='None', marker='s',
+                                              markersize=40, markeredgecolor='k',
+                                              color=loop_color, markeredgewidth=2)
+
+        self.mass2, = self._animation_ax.plot([], [], linestyle='None', marker='o',
+                                              markersize=20, markeredgecolor='k',
+                                              color=loop_color, markeredgewidth=2)
+
+        self.line, = self._animation_ax.plot([], [], 'o-', color=loop_color, lw=4,
+                                             markersize=6, markeredgecolor='k', markerfacecolor='k')
+
+        # time_template = 'time = %.1fs'    # TODO remove
         # time_text = self._animation_ax.text(0.05,0.9,'',transform=self._animation_ax.transAxes)
 
     def _init_static_plot(self):
@@ -126,28 +142,39 @@ class InvertedPendulumWidget(FigureCanvas):
         # self._state_ax.set_ylim(-0.4,0.5)
         # self._state_ax2.set_ylim(-0.02,0.02)
 
+    def update_state_anim(self, timestep: int, state) -> bool:
+        if timestep > self.freshest_timestep:
+            self.freshest_state = np.copyto(self.freshest_state, state)
+            self.freshest_timestep = timestep
+            self.state4plot = self.state2coord(self.freshest_state)
+        else:
+            self.parent_widget.print(f'Out of order packet for loop {self.loop_id}')
 
-    def update_state(self, data):
-        time_step, state = data
-        time_step = time_step / 100     # TODO ? * SAMPLING_PERIOD?
-        try:
-            self.state = np.append(self.state, [state], axis=0)
-            self.state4plot = self.state2coord(state)
-            self.time_step = np.append(self.time_step, [time_step], axis=0)
 
-        except:
-            # TODO ?
-            self.state = [state]
-            self.state4plot = self.state2coord(state)
-            self.time_step = [time_step]
+    # def update_state(self, time_step: int, state) -> bool:
+    #     #time_step, state = data
+    #     real_time_s = time_step * SAMPLING_PERIOD_S
+    #
+    #     try:
+    #         self.state = np.append(self.state, [state], axis=0)
+    #         self.state4plot = self.state2coord(state)
+    #         # self.time_step = np.append(self.time_step, [real_time_s], axis=0) # TODO Missing 2D implementation, log in FIFO Queue with popping last
+    #         return True
+    #     except:
+    #         # TODO ?
+    #         self.state = [state]
+    #         self.state4plot = self.state2coord(state)
+    #         self.time_step = [time_step]
+    #         return True
 
     @staticmethod
-    def state2coord(state, l=0.5):
+    def state2coord(state, length=0.5):
         x = state[PlantStates.cart_position]
         phi = state[PlantStates.pendulum_angle]
         x0 = x
-        x1 = -l * np.sin(phi) + x
-        y1 = l * np.cos(phi)
+        x1 = -length * np.sin(phi) + x
+        y1 = length * np.cos(phi)
+        # TODO Isn't there a +x for y1 ?
         state4plot = [x0, x1, y1]
         return state4plot
 

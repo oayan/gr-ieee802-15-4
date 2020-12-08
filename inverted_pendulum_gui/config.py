@@ -17,6 +17,7 @@
 
 import numpy as np
 
+
 # NETWORK CONFIGURATION
 NUMBER_OF_LOOPS = 2
 CONTROLLER_SEND_PORT_START = 5000
@@ -65,6 +66,7 @@ class GUIShowType:
 
 
 INVERTED_PENDULUM_COLOURS = ['orange', 'lawngreen', 'fuchsia', 'salmon', 'royalblue']
+inv_pend_color_it = iter(INVERTED_PENDULUM_COLOURS)
 GUI_TYPE = GUIShowType.animation
 SHOW_GUI = True
 
@@ -84,7 +86,7 @@ R = np.array([[1]])
 
 class bcolors:
     COMMPROCESS = '\033[95m'
-    OKBLUE = '\033[94m'
+    GUIPROCESS = '\033[94m'
     OKCYAN = '\033[96m'
     OKGREEN = '\033[92m'
     WARNING = '\033[93m'
