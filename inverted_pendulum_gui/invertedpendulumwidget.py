@@ -57,17 +57,17 @@ class InvertedPendulumWidget(FigureCanvas):
 
     def update_animation(self):
         """ This method is called by the parent widget (ApplicationWindow) to trigger a drawing update.
-         State4plot should contain the relevant coordinates of the state elements
-          relative to the canvas' coordinate system."""
-        try:
-            # Cart's marker data x, y coordinates (y coordinate is always zero for the cart)
-            self.cart_marker.set_data(self.state4plot[0], 0)
-            # Pendulum head's marker data x, y coordinates
-            self.pendulum_marker.set_data(self.state4plot[1], self.state4plot[2])
-            self.pendulum_line.set_data([self.state4plot[0], self.state4plot[1]], [0, self.state4plot[2]])
-            self._animation_ax.figure.canvas.draw()
-        except:
-            pass
+            State4plot should contain the relevant coordinates of the state elements
+            relative to the canvas' coordinate system."""
+        # Cart's marker data x, y coordinates (y coordinate is always zero for the cart)
+        self.cart_marker.set_data(self._get_cart_coordinate_x(), self._get_cart_coordinate_y())     # y-coord is 0
+        # Pendulum head's marker data x, y coordinates
+        self.pendulum_marker.set_data(self._get_pendulum_head_coordinate_x(), self._get_pendulum_head_coordinate_y())
+        # Pendulum body as line
+        self.pendulum_line.set_data([self._get_cart_coordinate_x(), self._get_pendulum_head_coordinate_x()],
+                                    [self._get_cart_coordinate_y(), self._get_pendulum_head_coordinate_y()])
+        # Re-draw with newly updated state
+        self._animation_ax.figure.canvas.draw()
 
     def _update_static_plot(self):
         try:
@@ -151,9 +151,9 @@ class InvertedPendulumWidget(FigureCanvas):
 
     def update_state_anim(self, timestep: int, state) -> bool:
         if timestep > self.freshest_timestep:
-            self.freshest_state = np.copyto(self.freshest_state, state)
+            self.freshest_state[0, :] = state[0, :]
             self.freshest_timestep = timestep
-            self.state4plot = self.state2coord(self.freshest_state)
+#            self.state4plot = self.state2coord(self.freshest_state) # TODO remove this state4plot completely
         else:
             self.parent_widget.print(f'Out of order packet for loop {self.loop_id}')
 
@@ -175,6 +175,9 @@ class InvertedPendulumWidget(FigureCanvas):
 
     def _get_cart_coordinate_x(self) -> float:
         return self.freshest_state[PlantStates.cart_position, 0]
+
+    def _get_cart_coordinate_y(self) -> float:
+        return 0.0
     
     def _get_pendulum_head_coordinate_x(self) -> float:
         # phi positive in counterclockwise
@@ -185,8 +188,8 @@ class InvertedPendulumWidget(FigureCanvas):
 
     @staticmethod
     def state2coord(state, length=0.2):
-        x = state[PlantStates.cart_position]
-        phi = state[PlantStates.pendulum_angle]
+        x = state[0, PlantStates.cart_position]
+        phi = state[0, PlantStates.pendulum_angle]
         x_cart = x
         x_pendulum_head = -length * np.sin(phi) + x
         y_pendulum_head = length * np.cos(phi)

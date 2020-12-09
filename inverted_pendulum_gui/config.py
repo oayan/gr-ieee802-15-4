@@ -19,7 +19,7 @@ import numpy as np
 
 
 # NETWORK CONFIGURATION
-NUMBER_OF_LOOPS = 2
+NUMBER_OF_LOOPS = 3
 CONTROLLER_SEND_PORT_START = 5000
 CONTROLLER_LISTEN_PORT_START = 5050
 PLANT_SEND_PORT_START = 5100
@@ -68,7 +68,7 @@ class GUIShowType:
 INVERTED_PENDULUM_COLOURS = ['orange', 'lawngreen', 'fuchsia', 'salmon', 'royalblue']
 inv_pend_color_it = iter(INVERTED_PENDULUM_COLOURS)
 GUI_TYPE = GUIShowType.animation
-SHOW_GUI = True
+SHOW_GUI = False
 
 # INVERTED PENDULUM CONFIGURATION
 SAMPLING_PERIOD_S = 0.01
@@ -87,7 +87,7 @@ R = np.array([[1]])
 class bcolors:
     COMMPROCESS = '\033[95m'
     GUIPROCESS = '\033[94m'
-    OKCYAN = '\033[96m'
+    INVPPROCESS = '\033[96m'
     OKGREEN = '\033[92m'
     WARNING = '\033[93m'
     FAIL = '\033[91m'

@@ -9,6 +9,7 @@ from queue import Empty
 import logging
 import sys
 import struct
+import asyncio
 
 
 class CPSocket(socket.socket):
@@ -18,11 +19,11 @@ class CPSocket(socket.socket):
 
 
 class ControlProcessHandler:
-    def __init__(self, _loop_id, _l_port, _s_port, _pipe):
+    def __init__(self, _loop_id, _l_port, _s_port, _queue: asyncio.Queue):
         self.loop_id = _loop_id
         self.l_port = _l_port
         self.s_port = _s_port
-        self.to_ctrl_pipe = _pipe
+        self.to_ctrl_queue = _queue
 
         self.l_sock = CPSocket(self)      # UDP Listener Socket
         self.s_sock = CPSocket(self)      # UDP Sender Socket
@@ -40,9 +41,9 @@ class CommunicationProcess(Process):
 
     - Each control process (e.g. InvertedPendulumProcess) is connected to CommunicationProcess through:
      -- a queue to write: N control processes-- 1 x queue --> 1 communication process
-     -- N pipes to read: 1 communication process -- N x pipes --> N control processes
+     -- N asyncio.Queue to read: 1 communication process -- N x queues --> N control processes
     """
-    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_pipes: dict, cpu_bound: bool = True):
+    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_queues: dict, cpu_bound: bool = True):
         if cpu_bound:
             run = self.run
         else:
@@ -52,7 +53,7 @@ class CommunicationProcess(Process):
 
         super().__init__(target=run, args=(None,))
         self.from_control_queue = _ctrl_to_comm_queue
-        self.to_control_pipes = _comm_to_ctrl_pipes
+        self.to_control_queues = _comm_to_ctrl_queues
 
         # Create ports for sockets
         # Communication process decides which socket belongs to which loop. Not the main anymore!
@@ -64,7 +65,7 @@ class CommunicationProcess(Process):
         for i in range(1, N + 1):  # 1, 2, ..., N
             assert(i not in self.ctrl_proc_handlers)
             self.ctrl_proc_handlers[i] = ControlProcessHandler(i, l_ports.popleft(), s_ports.popleft(),
-                                                               self.to_control_pipes[i])
+                                                               self.to_control_queues[i])
 
         self.print_socket_configuration()
 
@@ -97,7 +98,7 @@ class CommunicationProcess(Process):
                     loop_id, _, _ = Protocol.decode_control(data)   # extract loop_id out of packet
                     assert (loop_id == sock.ctrl_proc_handler.loop_id)  # make sure that loop_id matches socket's
                     cph = sock.ctrl_proc_handler[loop_id]   # get handler of the control process matching loop_id
-                    cph.to_ctrl_pipe.send(data)             # forward packet via correct pipe towards control process
+                    cph.to_ctrl_queue.put(data)             # forward packet via correct pipe towards control process
                 except socket.timeout as err:
                     logging.error(err)
                     self.print("This should not happen, check implementation!")
@@ -118,7 +119,7 @@ class CommunicationProcess(Process):
             # Consume outgoing packets from the queue
             try:
                 msg = self.from_control_queue.get_nowait()
-                loop_id, _, _ = Protocol.decode_state()
+                loop_id, _, _ = Protocol.decode_state(msg)
                 cph = self.ctrl_proc_handlers[loop_id]
                 sock = self.ctrl_proc_handlers[loop_id].s_sock
                 tx_bytes = sock.sendto(msg, ('127.0.0.1', cph.s_port))   # GNURadio is running on the same machine
@@ -135,9 +136,9 @@ class CommunicationProcess(Process):
                 self.print(f"decode_state() failed due to unknown data: {data}")
                 continue
 
-            else:
-                print('Unexpected Error')
-                raise
+            # else:
+            #     print('Unexpected Error')
+            #     raise
 
     # async def main(self):
     #     aio_queue = asyncio.Queue()
