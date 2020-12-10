@@ -15,19 +15,23 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from multiprocessing import Process, Queue
+import matplotlib.pyplot as plt
+import numpy as np
 import sys
 import config
-from applicationwindow import  ApplicationWindow
-from matplotlib.backends.qt_compat import QtCore, QtWidgets
+# from applicationwindow import  ApplicationWindow
+# from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from protocol import Protocol
 import asyncio
+import struct
+from invertedpendulumwidget import InvertedPendulumWidget
 import time
-if int(QtCore.qVersion()[0]) == 5:
-    from matplotlib.backends.backend_qt5agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-else:
-    from matplotlib.backends.backend_qt4agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+# if int(QtCore.qVersion()[0]) == 5:
+#     from matplotlib.backends.backend_qt5agg import (
+#         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+# else:
+#     from matplotlib.backends.backend_qt4agg import (
+#         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 
 from matplotlib.figure import Figure
 from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
@@ -50,18 +54,11 @@ class GUIProcess(Process):
 
     def __init__(self, _queue: Queue):
         super().__init__(target=self.run, args=(None,))
-        qapp = QtWidgets.QApplication.instance()
-        if not qapp:
-            qapp = QtWidgets.QApplication(sys.argv)
-        # # Start the event loop
-        qapp.exec_()
         self.ctrl_to_gui_queue = _queue
-        # Create new ApplicationWindow instance
 
-        self.app_window = ApplicationWindow(config.NUMBER_OF_LOOPS)
-        self.app_window.show()
-        self.app_window.activateWindow()
-        self.app_window.raise_()
+        self.widgets = {}
+        for i in range(1, config.NUMBER_OF_LOOPS + 1):
+            self.add_new_instance(i)
 
         self.print("Initialization completed successfully!")
 
@@ -70,9 +67,8 @@ class GUIProcess(Process):
         print(f"{config.bcolors.GUIPROCESS}{_name} {txt}{config.bcolors.ENDC}", end=_end)
 
     def main_loop(self) -> None:
-        canvas_refresh_period = 0.030  # approx. 30 ms
+        canvas_refresh_period = 0.030 # approx. 30 ms
         self.print("Starting GUI Process")
-        # self.app_window.start_sim()# TODO Remove
         t_last = time.perf_counter()
 
         while True:
@@ -80,7 +76,6 @@ class GUIProcess(Process):
             # This doesn't have to be accurate anyways, approximate behavior is enough for GUIProcess
             time.sleep(canvas_refresh_period - min(canvas_refresh_period, time.perf_counter() - t_last))
             t_last = time.perf_counter()
-            # self.print(t_last)
 
             # Wake up and read all available packets
             state_changed = False
@@ -88,18 +83,19 @@ class GUIProcess(Process):
                 try:
                     status_update = self.ctrl_to_gui_queue.get_nowait()
                     loop_id, seq_num, state = Protocol.decode_state(status_update)
-                    self.app_window.update_widget(loop_id, seq_num, state)
+                    self.update_widget(loop_id, seq_num, state)
                     state_changed = True
                 except Empty:
                     # Queue Empty, stop reading the queue
                     break
-                # else:
-                #     self.print("queue handling, unknown exception")
-                #     raise ValueError
+                except struct.error as err:
+                    self.print("Unpacking err", err)
+                except:
+                   raise
 
             # Finished reading all packets in the queue, now update the canvas
             if state_changed:
-                self.app_window.render()
+                self.render()
 
     def run(self) -> None:
         # Directly end process if GUI is not intended to be shown
@@ -107,10 +103,27 @@ class GUIProcess(Process):
             return
         self.main_loop()
 
+    # RENDERING METHODS
 
-# qapp = QtWidgets.QApplication.instance()
-# if not qapp:
-#     qapp = QtWidgets.QApplication(sys.argv)
-# q = Queue()
-# gp = GUIProcess(q)
-# gp.start()
+    def add_new_instance(self, loop_id) -> None:
+        """
+        :param gridx: x position of the widget in layout
+        :param gridy: y position of the widget in layout
+        :param loop_id: ID of the loop, ranges from 1 to N
+        :return: None
+        """
+        #self.plantRunningFlags = self.plantRunningFlags | (1 << loop_id)
+        widget = InvertedPendulumWidget(parent=self, _loop_id=loop_id)
+
+        assert (loop_id not in self.widgets)
+        self.widgets[loop_id] = widget
+        #widget.fig.show()
+
+    def update_widget(self, loop_id: int, time_step: int, state: np.array) -> None:
+        w = self.widgets[loop_id]
+        w.update_state(time_step, state)
+
+    def render(self):
+        for _, w in self.widgets.items():
+            w.update_draw()
+

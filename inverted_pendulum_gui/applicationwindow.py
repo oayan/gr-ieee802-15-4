@@ -3,13 +3,13 @@ import json
 import time
 from invertedpendulumwidget import InvertedPendulumWidget
 from matplotlib.ticker import FormatStrFormatter
-from matplotlib.backends.qt_compat import QtCore, QtWidgets
-if int(QtCore.qVersion()[0]) == 5:
-    from matplotlib.backends.backend_qt5agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-else:
-    from matplotlib.backends.backend_qt4agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+# from matplotlib.backends.qt_compat import QtCore, QtWidgets
+# if int(QtCore.qVersion()[0]) == 5:
+#     from matplotlib.backends.backend_qt5agg import (
+#         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+# else:
+#     from matplotlib.backends.backend_qt4agg import (
+#         FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 
 from matplotlib.figure import Figure
 from config import GUI_TYPE, GUIShowType, INVERTED_PENDULUM_COLOURS
@@ -54,7 +54,7 @@ class ApplicationWindow(QtWidgets.QMainWindow):
 
     def render(self):
         for _, w in self.widgets.items():
-            w.update_animation()
+            w.update_draw()
 
     def exit_model(self, p_id):
         if self.plantRunningFlags & (1 << p_id):

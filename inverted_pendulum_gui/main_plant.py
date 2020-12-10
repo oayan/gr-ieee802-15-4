@@ -7,15 +7,13 @@ from multiprocessing import Queue
 from config import NUMBER_OF_LOOPS as N
 from config import SHOW_GUI
 from time import sleep
-import sys
-import asyncio
 
 
 def main():
     np.random.seed(int(time.time()))
 
     ctrl_to_comm_queue = Queue()    # Create control-to-communication queue x 1
-    comm_to_ctrl_queues = {}        # Create communication-to-control asyncio.Queue x N
+    comm_to_ctrl_queues = {}        # Create communication-to-control Queue x N
     ctrl_to_gui_queue = Queue()     # Create control-to-GUI queue x 1
 
     for i in range(1, N + 1):   # 1, 2, ..., N
@@ -53,6 +51,7 @@ def main():
     communication_process.start()
     if SHOW_GUI:
         gui_proces.start()
+
     for i, p in control_processes.items():
         p.start()
 

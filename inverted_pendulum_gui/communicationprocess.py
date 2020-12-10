@@ -91,13 +91,12 @@ class CommunicationProcess(Process):
         while True:
             # Get ready reader sockets, non-blocking
             rlist, _, _ = select.select(listener_sockets, [], [], 0)
-
             for sock in rlist:
                 try:
                     data, addr = sock.recvfrom(128)     # buffer size is 128 bytes, should not block due to select
                     loop_id, _, _ = Protocol.decode_control(data)   # extract loop_id out of packet
                     assert (loop_id == sock.ctrl_proc_handler.loop_id)  # make sure that loop_id matches socket's
-                    cph = sock.ctrl_proc_handler[loop_id]   # get handler of the control process matching loop_id
+                    cph = sock.ctrl_proc_handler            # get handler of the control process matching loop_id
                     cph.to_ctrl_queue.put(data)             # forward packet via correct pipe towards control process
                 except socket.timeout as err:
                     logging.error(err)
@@ -112,8 +111,10 @@ class CommunicationProcess(Process):
                     print(err)
                     self.print(f"decode_control() failed due to unknown data: {data}")
                     continue
-                else:
-                    print("Unknown error while unpacking!")
+                except AssertionError as err:
+                    self.print("Assertion falied", err)
+                except:
+                    self.print("Unknown error while unpacking!")
                     sys.exit(1)
 
             # Consume outgoing packets from the queue

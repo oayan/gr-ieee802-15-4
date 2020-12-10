@@ -19,8 +19,7 @@ import control
 import control.matlab
 import math
 import time
-from PySide2.QtCore import QThread, Signal,Slot, QObject, QTimer
-from protocol import Data,Protocol
+from protocol import Protocol
 from config import COEFFICIENT_OF_FRICTION_FOR_CART as b
 from config import MASS_MOMENT_OF_INERTIA_OF_THE_PENDULUM as I
 from config import GRAVITATIONAL_COEFFICIENT as g
@@ -74,7 +73,6 @@ class InvertedPendulumProcess(Process):
 
         # Control related initialization
         self.init_model()
-        self.Data = Data()
         self.plant_id = loop_id
         self.update_time = np.zeros(shape=(1, int(math.ceil(T_sim / T_s)) + 1))
         self.aoi_list = np.zeros(shape=(1, int(math.ceil(T_sim / T_s)) + 1))
@@ -173,6 +171,7 @@ class InvertedPendulumProcess(Process):
             self.to_comm_queue.put(msg)             # Send to communication process
             if config.SHOW_GUI:
                 self.to_gui_queue.put(msg)          # Send to gui process if GUI is running
+
             self.tx_cnt += 1
         except:
             self.print(f"i={self.plant_id}: Error while sending state")
