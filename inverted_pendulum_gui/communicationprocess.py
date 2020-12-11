@@ -3,6 +3,8 @@ from protocol import Protocol, P2C_PACKET_SIZE_bytes
 import select
 import socket
 from config import NUMBER_OF_LOOPS as N
+from config import SIMULATION_DURATION_SECONDS as T_sim
+from config import SAMPLING_PERIOD_S as T_s
 import config
 import collections
 from queue import Empty
@@ -10,6 +12,9 @@ import logging
 import sys
 import struct
 import json
+import numpy as np
+import math
+import time
 
 
 class CPSocket(socket.socket):
@@ -60,11 +65,13 @@ class CommunicationProcess(Process):
         super().__init__(target=run, args=(None,))
         self.from_control_queue = _ctrl_to_comm_queue
         self.to_control_queues = _comm_to_ctrl_queues
+        self.measurement_folder = None
         # Create ports for sockets
         # Communication process decides which socket belongs to which loop. Not the main anymore!
         s_ports = collections.deque(range(config.PLANT_SEND_PORT_START, config.PLANT_SEND_PORT_STOP))
         l_ports = collections.deque(range(config.PLANT_LISTEN_PORT_START, config.PLANT_LISTEN_PORT_STOP))
-
+        self.send_time = np.zeros(shape=(N, int(math.ceil(T_sim / T_s)) + 1))
+        self.receive_time = np.zeros(shape=(N, int(math.ceil(T_sim / T_s)) + 1))
         self.ctrl_proc_handlers = {}
 
         for i in range(1, N + 1):  # 1, 2, ..., N
@@ -99,9 +106,11 @@ class CommunicationProcess(Process):
             for sock in rlist:
                 try:
                     data, addr = sock.recvfrom(128)     # buffer size is 128 bytes, should not block due to select
-                    loop_id, _, _ = Protocol.decode_control(data)   # extract loop_id out of packet
+                    t = time.perf_counter()
+                    loop_id, seq_nr, _ = Protocol.decode_control(data)   # extract loop_id out of packet
                     assert (loop_id == sock.ctrl_proc_handler.loop_id)  # make sure that loop_id matches socket's
                     cph = sock.ctrl_proc_handler            # get handler of the control process matching loop_id
+                    self.receive_time[loop_id - 1, seq_nr] = t
                     cph.to_ctrl_queue.put(data)             # forward packet via correct pipe towards control process
                 except socket.timeout as err:
                     logging.error(err)
@@ -131,9 +140,13 @@ class CommunicationProcess(Process):
                     listener_sockets.remove(l_sock)
                     self.ctrl_proc_handlers[loop_id].close_socket_connection()
                     self.print("Simulation complete signal received")
+                    if len(listener_sockets) == 0:
+                        self.log_communication_results()
+                        return
                 else:
                     cph = self.ctrl_proc_handlers[loop_id]
                     sock = self.ctrl_proc_handlers[loop_id].s_sock
+                    self.send_time[loop_id - 1, seq_nr] = time.perf_counter()
                     tx_bytes = sock.sendto(msg, ('127.0.0.1', cph.s_port))   # GNURadio is running on the same machine
 
                     if tx_bytes != P2C_PACKET_SIZE_bytes:
@@ -148,14 +161,15 @@ class CommunicationProcess(Process):
                 self.print(f"decode_state() failed due to unknown data: {data}")
                 continue
 
-    def log_communication_results(self, measurement_folder):
-        with open(measurement_folder + f"/Loop_{self.loop_id}/send_time.json", 'w', encoding='utf-8') as f:
-            json.dump({'send time': self.send_time[0].tolist()}, f, ensure_ascii=False, indent=4)
-        with open(measurement_folder + f"/Loop_{self.loop_id}/receive_time.json", 'w', encoding='utf-8') as f:
-            json.dump({'receive time': self.receive_time[0].tolist()}, f, ensure_ascii=False, indent=4)
-        with open(measurement_folder + f"/Loop_{self.loop_id}/rtt.json", 'w', encoding='utf-8') as f:
-            json.dump({'round trip time': (self.receive_time[0] - self.send_time[0]).tolist()}, f, ensure_ascii=False,
-                      indent=4)
+    def log_communication_results(self):
+        for _, cph in self.ctrl_proc_handlers.items():
+            with open(self.measurement_folder + f"/Loop_{cph.loop_id}/send_time.json", 'w', encoding='utf-8') as f:
+                json.dump({'send time': self.send_time[cph.loop_id - 1].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.measurement_folder + f"/Loop_{cph.loop_id}/receive_time.json", 'w', encoding='utf-8') as f:
+                json.dump({'receive time': self.receive_time[cph.loop_id - 1].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.measurement_folder + f"/Loop_{cph.loop_id}/rtt.json", 'w', encoding='utf-8') as f:
+                json.dump({'round trip time': (self.receive_time[cph.loop_id - 1] - self.send_time[0]).tolist()}, f, ensure_ascii=False,
+                          indent=4)
 
 
 if __name__ == '__main__':

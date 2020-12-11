@@ -70,8 +70,8 @@ class GUIProcess(Process):
         canvas_refresh_period = 0.030 # approx. 30 ms
         self.print("Starting GUI Process")
         t_last = time.perf_counter()
-
-        while True:
+        closed_loops = 0
+        while closed_loops < config.NUMBER_OF_LOOPS:
             # Wait for rendering time to come (subtract the processing delay from refresh period)
             # This doesn't have to be accurate anyways, approximate behavior is enough for GUIProcess
             time.sleep(canvas_refresh_period - min(canvas_refresh_period, time.perf_counter() - t_last))
@@ -79,12 +79,18 @@ class GUIProcess(Process):
 
             # Wake up and read all available packets
             state_changed = False
+
             while True:
                 try:
                     status_update = self.ctrl_to_gui_queue.get_nowait()
                     loop_id, seq_num, state = Protocol.decode_state(status_update)
-                    self.update_widget(loop_id, seq_num, state)
-                    state_changed = True
+                    if seq_num == config.SIMULATION_END_SEQ_NR:
+                        self.widgets[loop_id].close_figure()
+                        del self.widgets[loop_id]
+                        closed_loops += 1
+                    else:
+                        self.update_widget(loop_id, seq_num, state)
+                        state_changed = True
                 except Empty:
                     # Queue Empty, stop reading the queue
                     break
@@ -102,6 +108,7 @@ class GUIProcess(Process):
         if not config.SHOW_GUI:
             return
         self.main_loop()
+        print("close gui")
 
     # RENDERING METHODS
 
@@ -126,4 +133,5 @@ class GUIProcess(Process):
     def render(self):
         for _, w in self.widgets.items():
             w.update_draw()
+
 

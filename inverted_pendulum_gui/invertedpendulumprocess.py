@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-import datetime
 import control
 import control.matlab
 import math
@@ -33,9 +32,8 @@ import config
 import scipy
 import os
 import warnings
-from pathlib import Path
 import json
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Lock
 import time
 from protocol import Protocol
 from queue import Empty
@@ -63,13 +61,14 @@ class InvertedPendulumProcess(Process):
     Perhaps, this Process should have its own logger
     """
 
-    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue):
+    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue, lock: Lock):
         # Process related initialization
         super().__init__(target=self.run, args=(None,))
         self.to_comm_queue = ctrl_to_comm_queue
         self.to_gui_queue = ctrl_to_gui_queue
         self.from_comm_queue = comm_to_ctrl_queue
-
+        self.logging_lock = lock
+        self.measurement_folder = None
         # Control related initialization
         self.init_model()
         self.loop_id = loop_id
@@ -90,7 +89,7 @@ class InvertedPendulumProcess(Process):
         self.print(" is initialized")
 
     def print(self, txt, _end='\n'):
-        print(f"{config.bcolors.INVPPROCESS} InvpP {self.loop_id}: {txt}{config.bcolors.ENDC}", end=_end)
+        print(f"{config.bcolors.INVPPROCESS}InvpP {self.loop_id}: {txt}{config.bcolors.ENDC}", end=_end)
 
     def check_for_received_packet(self) -> None:
         """
@@ -267,34 +266,41 @@ class InvertedPendulumProcess(Process):
         self.to_comm_queue.put(msg, block=True)  # Send to communication process
         if config.SHOW_GUI:
             self.to_gui_queue.put(msg, block=True)
+
+        self.log_control_results()
         self.print("Simulation complete signal sent!")
 
-    def log_control_results(self, folder_path) -> None:
+    def log_control_results(self) -> None:
+
         try:
+            self.logging_lock.acquire()
             # Age of Information
-            with open(folder_path + f"/Loop_{self.loop_id}/aoi.json", 'w', encoding='utf-8') as f:
+            with open(self.measurement_folder + f"/Loop_{self.loop_id}/aoi.json", 'w', encoding='utf-8') as f:
                 json.dump({'age of information': self.aoi_list[0].tolist()}, f, ensure_ascii=False, indent=4)
 
             # Update time
-            with open(folder_path + f"/Loop_{self.loop_id}/update_time.json", 'w', encoding='utf-8') as f:
+            with open(self.measurement_folder + f"/Loop_{self.loop_id}/update_time.json", 'w', encoding='utf-8') as f:
                 json.dump({'update time': self.update_time[0].tolist()}, f, ensure_ascii=False, indent=4)
 
             # Plant state evolution
-            with open(folder_path + f"/Loop_{self.loop_id}/plant_state.json", 'w', encoding='utf-8') as f:
-                json.dump({'cart position': self.plant_values[0].tolist(), 'cart velocity': self.plant_values[1].tolist(),
-                           'pendulum angle': self.plant_values[2].tolist(), 'angular speed': self.plant_values[3].tolist()},
+
+            with open(self.measurement_folder + f"/Loop_{self.loop_id}/plant_state.json", 'w', encoding='utf-8') as f:
+                json.dump({'cart position': self.state_values[0].tolist(), 'cart velocity': self.state_values[1].tolist(),
+                           'pendulum angle': self.state_values[2].tolist(), 'angular speed': self.state_values[3].tolist()},
                           f, ensure_ascii=False, indent=4)
 
             # Control input evolution
-            with open(folder_path + f"/Loop_{self.loop_id}/control_state.json", 'w', encoding='utf-8') as f:
+            with open(self.measurement_folder + f"/Loop_{self.loop_id}/control_state.json", 'w', encoding='utf-8') as f:
                 json.dump({'control value': self.control_values[0].tolist()}, f, ensure_ascii=False, indent=4)
 
         finally:
             self.print("Logging completed")
+            self.logging_lock.release()
 
     def create_log_folders(self, measurement_folder_path: str) -> None:
         try:
             os.makedirs(measurement_folder_path + f"/Loop_{self.loop_id}")
+            self.measurement_folder = measurement_folder_path
         except:
             self.print("Loop folder could not be created!")
             raise

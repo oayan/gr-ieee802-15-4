@@ -47,6 +47,12 @@ class InvertedPendulumWidget:
         # self.update_draw()
         # super().__init__(self.fig)
 
+    def close_figure(self):
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+        plt.close(self.fig)
+
+
     def _init_animation(self, width=6, height=6, dpi=100):
         try:
             # You probably won't need this if you're embedding things in a tkinter plot...
@@ -112,6 +118,7 @@ class InvertedPendulumWidget:
         self.update_2d_plot()
         # self._state_ax.set_ylim(-0.4,0.5)
         # self._state_ax2.set_ylim(-0.02,0.02)
+
 
 
     def update_animation(self):

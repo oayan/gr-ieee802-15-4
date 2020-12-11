@@ -25,6 +25,7 @@ from gnuradio import blocks
 from gnuradio import eng_notation
 from gnuradio import filter
 from gnuradio import gr
+from gnuradio import qtgui
 from gnuradio import uhd
 from gnuradio.eng_option import eng_option
 from gnuradio.filter import firdes
@@ -32,6 +33,7 @@ from gnuradio.qtgui import Range, RangeWidget
 from ieee802_15_4_oqpsk_phy import ieee802_15_4_oqpsk_phy  # grc-generated hier_block
 from optparse import OptionParser
 import ieee802_15_4
+import sip
 import time
 from gnuradio import qtgui
 
@@ -68,7 +70,7 @@ class top_block(gr.top_block, Qt.QWidget):
         ##################################################
         self.tx_gain = tx_gain = 0.75
         self.rx_gain = rx_gain = 0.75
-        self.freq_controller_tx = freq_controller_tx = 2610000000
+        self.freq_controller_tx = freq_controller_tx = 2575000000
         self.freq_controller_rx = freq_controller_rx = 2575000000
 
         self.channel_filter = channel_filter = firdes.complex_band_pass(1.0, 384000, -80000, 80000, 20000, firdes.WIN_HAMMING, 6.76)
@@ -106,9 +108,52 @@ class top_block(gr.top_block, Qt.QWidget):
         self.uhd_usrp_sink_0.set_samp_rate(4000000)
         self.uhd_usrp_sink_0.set_center_freq(freq_controller_rx, 0)
         self.uhd_usrp_sink_0.set_normalized_gain(tx_gain, 0)
+        self.qtgui_freq_sink_x_0_0 = qtgui.freq_sink_c(
+        	1024, #size
+        	firdes.WIN_BLACKMAN_hARRIS, #wintype
+        	0, #fc
+        	4e6, #bw
+        	"", #name
+        	1 #number of inputs
+        )
+        self.qtgui_freq_sink_x_0_0.set_update_time(0.10)
+        self.qtgui_freq_sink_x_0_0.set_y_axis(-140, 10)
+        self.qtgui_freq_sink_x_0_0.set_y_label('Relative Gain', 'dB')
+        self.qtgui_freq_sink_x_0_0.set_trigger_mode(qtgui.TRIG_MODE_FREE, 0.0, 0, "")
+        self.qtgui_freq_sink_x_0_0.enable_autoscale(False)
+        self.qtgui_freq_sink_x_0_0.enable_grid(False)
+        self.qtgui_freq_sink_x_0_0.set_fft_average(1.0)
+        self.qtgui_freq_sink_x_0_0.enable_axis_labels(True)
+        self.qtgui_freq_sink_x_0_0.enable_control_panel(False)
+
+        if not True:
+          self.qtgui_freq_sink_x_0_0.disable_legend()
+
+        if "complex" == "float" or "complex" == "msg_float":
+          self.qtgui_freq_sink_x_0_0.set_plot_pos_half(not True)
+
+        labels = ['', '', '', '', '',
+                  '', '', '', '', '']
+        widths = [1, 1, 1, 1, 1,
+                  1, 1, 1, 1, 1]
+        colors = ["blue", "red", "green", "black", "cyan",
+                  "magenta", "yellow", "dark red", "dark green", "dark blue"]
+        alphas = [1.0, 1.0, 1.0, 1.0, 1.0,
+                  1.0, 1.0, 1.0, 1.0, 1.0]
+        for i in xrange(1):
+            if len(labels[i]) == 0:
+                self.qtgui_freq_sink_x_0_0.set_line_label(i, "Data {0}".format(i))
+            else:
+                self.qtgui_freq_sink_x_0_0.set_line_label(i, labels[i])
+            self.qtgui_freq_sink_x_0_0.set_line_width(i, widths[i])
+            self.qtgui_freq_sink_x_0_0.set_line_color(i, colors[i])
+            self.qtgui_freq_sink_x_0_0.set_line_alpha(i, alphas[i])
+
+        self._qtgui_freq_sink_x_0_0_win = sip.wrapinstance(self.qtgui_freq_sink_x_0_0.pyqwidget(), Qt.QWidget)
+        self.top_grid_layout.addWidget(self._qtgui_freq_sink_x_0_0_win)
         self.ieee802_15_4_rime_stack_0 = ieee802_15_4.rime_stack(([129]), ([131]), ([132]), ([23,42]))
         self.ieee802_15_4_oqpsk_phy_0 = ieee802_15_4_oqpsk_phy()
-        self.ieee802_15_4_mac_controller_0 = ieee802_15_4.mac_controller(False,0x8841,0,0x1aaa,10,3,10,True,0,0)
+        self.ieee802_15_4_mac_controller_0 = ieee802_15_4.mac_controller(False,0x8841,0,0x1aaa,8,2,20,True,0,0)
         self.ieee802_15_4_csma_0 = ieee802_15_4.csma()
         self.fft_filter_xxx_0 = filter.fft_filter_ccc(1, (channel_filter), 1)
         self.fft_filter_xxx_0.declare_sample_delay(0)
@@ -129,6 +174,7 @@ class top_block(gr.top_block, Qt.QWidget):
         self.msg_connect((self.ieee802_15_4_rime_stack_0, 'bcout'), (self.blocks_socket_pdu_0_0_0, 'pdus'))
         self.msg_connect((self.ieee802_15_4_rime_stack_0, 'toMAC'), (self.ieee802_15_4_mac_controller_0, 'app in'))
         self.connect((self.fft_filter_xxx_0, 0), (self.ieee802_15_4_csma_0, 0))
+        self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), (self.qtgui_freq_sink_x_0_0, 0))
         self.connect((self.ieee802_15_4_oqpsk_phy_0, 0), (self.uhd_usrp_sink_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.fft_filter_xxx_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.ieee802_15_4_oqpsk_phy_0, 0))

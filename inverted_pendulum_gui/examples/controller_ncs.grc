@@ -294,7 +294,7 @@
     </param>
     <param>
       <key>value</key>
-      <value>2610000000</value>
+      <value>2575000000</value>
     </param>
   </block>
   <block>
@@ -797,7 +797,7 @@
     </param>
     <param>
       <key>nr_loop</key>
-      <value>3</value>
+      <value>2</value>
     </param>
     <param>
       <key>schedule_method</key>
@@ -809,11 +809,11 @@
     </param>
     <param>
       <key>slot_len</key>
-      <value>10</value>
+      <value>20</value>
     </param>
     <param>
       <key>ts_dur_ms</key>
-      <value>10</value>
+      <value>8</value>
     </param>
   </block>
   <block>
@@ -950,7 +950,7 @@
     </param>
     <param>
       <key>_enabled</key>
-      <value>0</value>
+      <value>1</value>
     </param>
     <param>
       <key>fftsize</key>
