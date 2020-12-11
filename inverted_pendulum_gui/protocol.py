@@ -1,5 +1,4 @@
-# Copyright (C) 2020 Jiayu Zhong
-#               2020 Hasan Yagiz Özkan <yagiz.oezkan@tum.de>
+# Copyright (C) 2020 Hasan Yagiz Özkan <yagiz.oezkan@tum.de>
 #               2020 Onur Ayan <onur.ayan@tum.de>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-# from PySide2.QtCore import QThread, Signal, Slot, QObject
 import struct
 
 # Plant-To-Controller Packet Format
@@ -80,15 +78,6 @@ class Protocol:
         seq_num = pkt[ControllerToPlantPacketFields.seq_num]
         u = pkt[ControllerToPlantPacketFields.control_input]
         return [loop_id, seq_num, u]
-
-#
-# class Data(QObject):
-#     #data= [time_step,state]
-#     data = Signal(list)
-#     state = Signal(bytes, int)
-#     seq = Signal(float)
-#     control = Signal(int, float)
-#     stop = Signal(int)
 
 
 class PlantToControllerPacketFields:

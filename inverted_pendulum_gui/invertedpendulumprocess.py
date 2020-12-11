@@ -18,25 +18,22 @@ import numpy as np
 import control
 import control.matlab
 import math
-import time
-from protocol import Protocol
 from config import COEFFICIENT_OF_FRICTION_FOR_CART as b
 from config import MASS_MOMENT_OF_INERTIA_OF_THE_PENDULUM as I
 from config import GRAVITATIONAL_COEFFICIENT as g
 from config import MASS_OF_THE_PENDULUM as m
 from config import MASS_OF_THE_CART as M
 from config import LENGTH_OF_THE_PENDULUM as l
-from config import REFERENCE_VALUE as r
 from config import SAMPLING_PERIOD_S as T_s
 from config import SIMULATION_DURATION_SECONDS as T_sim
 from config import Q as Q
 from config import R as R
 import config
-from config import PRECOMPENSATOR as Nbar
 import scipy
 import warnings
-
-from multiprocessing import Process, Queue, Pipe
+from pathlib import Path
+import json
+from multiprocessing import Process, Queue, Lock
 import time
 from protocol import Protocol
 from queue import Empty
@@ -64,16 +61,17 @@ class InvertedPendulumProcess(Process):
     Perhaps, this Process should have its own logger
     """
 
-    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue):
+    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue, _logging_lock: Lock):
         # Process related initialization
         super().__init__(target=self.run, args=(None,))
         self.to_comm_queue = ctrl_to_comm_queue
         self.to_gui_queue = ctrl_to_gui_queue
         self.from_comm_queue = comm_to_ctrl_queue
+        self.log_lock = _logging_lock
 
         # Control related initialization
         self.init_model()
-        self.plant_id = loop_id
+        self.loop_id = loop_id
         self.update_time = np.zeros(shape=(1, int(math.ceil(T_sim / T_s)) + 1))
         self.aoi_list = np.zeros(shape=(1, int(math.ceil(T_sim / T_s)) + 1))
         self.state_values = np.zeros(shape=(4, int(math.ceil(T_sim / T_s)) + 1))
@@ -91,7 +89,7 @@ class InvertedPendulumProcess(Process):
         self.print(" is initialized")
 
     def print(self, txt, _end='\n'):
-        print(f"{config.bcolors.INVPPROCESS} InvpP {self.plant_id}: {txt}{config.bcolors.ENDC}", end=_end)
+        print(f"{config.bcolors.INVPPROCESS} InvpP {self.loop_id}: {txt}{config.bcolors.ENDC}", end=_end)
 
     def check_for_received_packet(self) -> None:
         """
@@ -99,25 +97,26 @@ class InvertedPendulumProcess(Process):
         :return: None
         """
         while True:
-            # Infinite loop listening to unique(for this loop only) asynchronous queue from communication process
+            # Infinite loop listening to unique (for this loop only) queue from communication process
             try:
                 pkt = self.from_comm_queue.get_nowait()    # Non-blocking
                 loop_id, seq_num, u = Protocol.decode_control(pkt)
-                assert (loop_id == self.plant_id)
+                assert (loop_id == self.loop_id)
                 self.update_control(seq_num, u)
             except Empty:
-                break
+                # If there aren't any packets to process, task is done! Return from this function.
+                return
             except struct.error as err:
-                print(err)
+                self.print(err)
                 self.print(f"decode_control() failed due to unknown data: {pkt}")
                 raise err
 
-    def main_loop(self) -> None:
+    def main_loop(self, num_steps: int) -> None:
         # asyncio_loop = asyncio.get_running_loop()
         t_last = 0
-        while True:
-            # TODO put a finishing condition instead of True
+        while self.k < num_steps:
             t_now = time.perf_counter()
+            # Receive & process all buffered incoming packets
             self.check_for_received_packet()
             # Check if new sampling time has arrived, i.e., last sampling instance + sampling period (10ms)
             if t_now > t_last + T_s:
@@ -131,13 +130,15 @@ class InvertedPendulumProcess(Process):
             elif t_now < t_last + T_s - 0.002:
                 time.sleep(0.001)
 
-        self.print("completed measurement!")
+        self.emit_simulation_complete()
+
+        self.print("completed measurement! Exiting...")
         # TODO execute logging & completion signals etc.
-        # TODO Suggested way of completing: put a completion signal to the corresponding queues
         return
 
     def run(self):
-        self.main_loop()
+        number_of_timesteps = int(config.SIMULATION_DURATION_SECONDS * config.SAMPLING_FREQUENCY_HZ)
+        self.main_loop(number_of_timesteps)
 
     """ CONTROL RELATED METHODS """
 
@@ -167,14 +168,14 @@ class InvertedPendulumProcess(Process):
 
     def send_state(self):
         try:
-            msg = Protocol.encode_state(self.plant_id, self.k, self.x)
+            msg = Protocol.encode_state(self.loop_id, self.k, self.x)
             self.to_comm_queue.put(msg)             # Send to communication process
             if config.SHOW_GUI:
                 self.to_gui_queue.put(msg)          # Send to gui process if GUI is running
 
             self.tx_cnt += 1
         except:
-            self.print(f"i={self.plant_id}: Error while sending state")
+            self.print(f"i={self.loop_id}: Error while sending state")
             # TODO: sending location tx timestamp
 
     def calculate_Ax_w(self):
@@ -261,3 +262,74 @@ class InvertedPendulumProcess(Process):
 
         return np.copy(A), np.copy(B), np.copy(C), np.copy(D), np.copy(K)
 
+    def emit_simulation_complete(self):
+        # Send a single packet to corresponding queues with a special sequence number to inform them about completion
+        msg = Protocol.encode_state(self.loop_id, config.SIMULATION_END_SEQ_NR, np.zeros(shape=self.x.shape))
+        self.to_comm_queue.put(msg, block=True)  # Send to communication process
+        if config.SHOW_GUI:
+            self.to_gui_queue.put(msg, block=True)
+        self.print("Simulation complete signal sent!")
+
+    def log_control_results(self):
+        self.log_lock.acquire()
+        try:
+            with open(self.folder_path + "/Loop_{}/send_time.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'send time': cli.send_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.folder_path + "/Loop_{}/receive_time.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'receive time': cli.receive_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.folder_path + "/Loop_{}/rtt.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'round trip time': (cli.receive_time[0] - cli.send_time[0]).tolist()}, f, ensure_ascii=False, indent=4)
+
+            with open(self.folder_path + "/Loop_{}/aoi.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'age of information': mdl.aoi_list[0].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.folder_path + "/Loop_{}/update_time.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'update time': mdl.update_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+            with open(self.folder_path + "/Loop_{}/plant_state.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'cart position': mdl.plant_values[0].tolist(), 'cart velocity': mdl.plant_values[1].tolist(),
+                           'pendulum angle': mdl.plant_values[2].tolist(), 'angular speed': mdl.plant_values[3].tolist()},
+                          f, ensure_ascii=False, indent=4)
+            with open(self.folder_path + "/Loop_{}/control_state.json".format(p_num), 'w', encoding='utf-8') as f:
+                json.dump({'control value': mdl.control_values[0].tolist()}, f, ensure_ascii=False, indent=4)
+
+                p_num += 1
+        finally:
+            self.log_lock.release()
+
+
+    def create_log_folders(self):
+        try:
+            last_log = 0
+            if not os.path.exists(self.folder_path + config.get_strategy_abbreviation()):
+                try:
+                    os.makedirs(self.folder_path + config.get_strategy_abbreviation())
+                except:
+                    print("Folder could not be created!")
+                    exit(1)
+            p = Path(self.folder_path + config.get_strategy_abbreviation())
+            for folder in p.iterdir():
+                if folder.is_dir():
+                    if "Measurement_" in folder.stem:
+                        log_num = folder.stem.replace('Measurement_', '')
+                        if last_log < int(log_num):
+                            last_log = int(log_num)
+            self.folder_path = self.folder_path + config.get_strategy_abbreviation() + "/Measurement_{}/".format(last_log + 1)
+            time.sleep(0.1)
+            os.makedirs(self.folder_path)
+        except:
+            print("Folder could not be created!")
+        with open(self.folder_path + "config.json", 'w', encoding='utf-8') as f:
+            json.dump({'log time': str(write_time),
+                       'number of loops': config.NUMBER_OF_LOOPS,
+                       'simulation duration': config.SIMULATION_DURATION_SECONDS,
+                       'sampling period': config.SAMPLING_PERIOD_S,
+                       'Strategy': config.STRATEGY,
+                       'GUI Enable': config.SHOW_GUI,
+                       'Q': config.Q.flatten().tolist(),
+                       'R': config.R.flatten().tolist()
+                       }, f, ensure_ascii=False, indent=4)
+        for p_num in range(1, config.NUMBER_OF_LOOPS + 1):
+            try:
+                os.makedirs(self.folder_path + "/Loop_{}".format(p_num))
+            except:
+                print("Folder could not be created!")
+                exit(1)

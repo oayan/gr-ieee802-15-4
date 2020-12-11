@@ -1,4 +1,4 @@
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Lock
 from protocol import Protocol, P2C_PACKET_SIZE_bytes
 import select
 import socket
@@ -32,6 +32,7 @@ class ControlProcessHandler:
         self.l_sock.bind(('127.0.0.1', self.l_port))
 
 
+
 class CommunicationProcess(Process):
     """
     CommunicationProcess class that serves as the gateway of all control loops to outside world.
@@ -43,7 +44,7 @@ class CommunicationProcess(Process):
      -- a queue to write: N control processes-- 1 x queue --> 1 communication process
      -- N asyncio.Queue to read: 1 communication process -- N x queues --> N control processes
     """
-    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_queues: dict, cpu_bound: bool = True):
+    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_queues: dict, _logging_lock: Lock, cpu_bound: bool = True):
         if cpu_bound:
             run = self.run
         else:
@@ -54,6 +55,7 @@ class CommunicationProcess(Process):
         super().__init__(target=run, args=(None,))
         self.from_control_queue = _ctrl_to_comm_queue
         self.to_control_queues = _comm_to_ctrl_queues
+        self.log_lock = _logging_lock
 
         # Create ports for sockets
         # Communication process decides which socket belongs to which loop. Not the main anymore!
@@ -136,10 +138,9 @@ class CommunicationProcess(Process):
                 print(err)
                 self.print(f"decode_state() failed due to unknown data: {data}")
                 continue
+    def log_communication_results(self):
+        pass
 
-            # else:
-            #     print('Unexpected Error')
-            #     raise
 
     # async def main(self):
     #     aio_queue = asyncio.Queue()

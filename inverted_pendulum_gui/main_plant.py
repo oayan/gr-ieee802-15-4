@@ -3,7 +3,7 @@ import time
 from communicationprocess import CommunicationProcess
 from invertedpendulumprocess import InvertedPendulumProcess
 from guiprocess import GUIProcess
-from multiprocessing import Queue
+from multiprocessing import Queue, Lock
 from config import NUMBER_OF_LOOPS as N
 from config import SHOW_GUI
 from time import sleep
@@ -15,6 +15,7 @@ def main():
     ctrl_to_comm_queue = Queue()    # Create control-to-communication queue x 1
     comm_to_ctrl_queues = {}        # Create communication-to-control Queue x N
     ctrl_to_gui_queue = Queue()     # Create control-to-GUI queue x 1
+    logging_lock = Lock()
 
     for i in range(1, N + 1):   # 1, 2, ..., N
         try:
@@ -25,7 +26,7 @@ def main():
             raise err
             exit(1)
 
-    communication_process = CommunicationProcess(ctrl_to_comm_queue, comm_to_ctrl_queues)
+    communication_process = CommunicationProcess(ctrl_to_comm_queue, comm_to_ctrl_queues, logging_lock, True)
     sleep(0.1)
 
     # ----- Create N control processes with corresponding queues passed as constructor argument
@@ -33,7 +34,7 @@ def main():
     for i in range(1, N + 1):   # i = 1, 2, ..., N
         try:
             assert(i not in control_processes)
-            control_processes[i] = InvertedPendulumProcess(i, ctrl_to_comm_queue, ctrl_to_gui_queue, comm_to_ctrl_queues[i])
+            control_processes[i] = InvertedPendulumProcess(i, ctrl_to_comm_queue, ctrl_to_gui_queue, comm_to_ctrl_queues[i], logging_lock)
         except KeyError as err:
             print(err)
             print("main_plant.py: Key not found")
