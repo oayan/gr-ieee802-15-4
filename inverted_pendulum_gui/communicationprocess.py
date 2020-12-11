@@ -31,6 +31,12 @@ class ControlProcessHandler:
     def bind_to_listen_port(self):
         self.l_sock.bind(('127.0.0.1', self.l_port))
 
+    def close_socket_connection(self):
+        self.l_sock.close()
+        self.s_sock.close()
+        socket_msg = "sockets of loop " + str(self.loop_id) + " is removed"
+        CommunicationProcess.print(socket_msg)
+        pass
 
 
 class CommunicationProcess(Process):
@@ -122,14 +128,20 @@ class CommunicationProcess(Process):
             # Consume outgoing packets from the queue
             try:
                 msg = self.from_control_queue.get_nowait()
-                loop_id, _, _ = Protocol.decode_state(msg)
-                cph = self.ctrl_proc_handlers[loop_id]
-                sock = self.ctrl_proc_handlers[loop_id].s_sock
-                tx_bytes = sock.sendto(msg, ('127.0.0.1', cph.s_port))   # GNURadio is running on the same machine
+                loop_id, seq_nr, _ = Protocol.decode_state(msg)
+                if seq_nr == config.SIMULATION_END_SEQ_NR:
+                    l_sock = self.ctrl_proc_handlers[loop_id].l_sock
+                    listener_sockets.remove(l_sock)
+                    self.ctrl_proc_handlers[loop_id].close_socket_connection()
+                    self.print("Simulation complete signal received")
+                else:
+                    cph = self.ctrl_proc_handlers[loop_id]
+                    sock = self.ctrl_proc_handlers[loop_id].s_sock
+                    tx_bytes = sock.sendto(msg, ('127.0.0.1', cph.s_port))   # GNURadio is running on the same machine
 
-                if tx_bytes != P2C_PACKET_SIZE_bytes:
-                    print(f"{config.bcolors.WARNING}'TX Bytes not matching'{config.bcolors.ENDC}")
-                    self.from_control_queue.put(msg)    # Put packet back to the queue since it could not be sent
+                    if tx_bytes != P2C_PACKET_SIZE_bytes:
+                        print(f"{config.bcolors.WARNING}'TX Bytes not matching'{config.bcolors.ENDC}")
+                        self.from_control_queue.put(msg)    # Put packet back to the queue since it could not be sent
 
             except Empty:
                 continue
@@ -138,44 +150,11 @@ class CommunicationProcess(Process):
                 print(err)
                 self.print(f"decode_state() failed due to unknown data: {data}")
                 continue
+
     def log_communication_results(self):
         pass
-
-
-    # async def main(self):
-    #     aio_queue = asyncio.Queue()
-    #     await asyncio.gather(self.read(aio_queue), self.write(aio_queue))
-    #
-    #
-    # async def read(self, queue) -> None:
-    #     while True:
-    #         num = await queue.get()
-    #         print('waiting For sleep', num)
-    #     return
-    #
-    # async def write(self, queue) -> None:
-    #     t_last = 0
-    #     while True:
-    #         t_now = time.perf_counter()  # ...
-    #         if t_now > t_last + 0.1:
-    #             t_last = t_now
-    #             print(t_now)
-    #             await queue.put(t_now)
-    #         elif t_now < t_last + 0.01 - 0.002:
-    #
-    #             await asyncio.sleep(0.001)
-    #
-    #     print("finished")
-    #     return
 
 
 if __name__ == '__main__':
     CommunicationProcess.print("Run from main_plant.py")
     exit(1)
-
-    # p_queue = Queue()
-    # p = CommunicationProcess(p_queue)
-    # p2 = CommunicationProcess(p_queue)
-    # # reader_p.daemon = True
-    # p.start()
-    # p2.start()
