@@ -85,7 +85,7 @@ class GUIProcess(Process):
                     status_update = self.ctrl_to_gui_queue.get_nowait()
                     loop_id, seq_num, state = Protocol.decode_state(status_update)
                     if seq_num == config.SIMULATION_END_SEQ_NR:
-                        self.widgets[loop_id].close_figure()
+                        # self.widgets[loop_id].close_figure()
                         del self.widgets[loop_id]
                         closed_loops += 1
                     else:
@@ -108,6 +108,7 @@ class GUIProcess(Process):
         if not config.SHOW_GUI:
             return
         self.main_loop()
+        plt.close('all')
         print("close gui")
 
     # RENDERING METHODS

@@ -119,8 +119,6 @@ class InvertedPendulumWidget:
         # self._state_ax.set_ylim(-0.4,0.5)
         # self._state_ax2.set_ylim(-0.02,0.02)
 
-
-
     def update_animation(self):
         """ This method is called by the parent widget (ApplicationWindow) to trigger a drawing update.
             State4plot should contain the relevant coordinates of the state elements
