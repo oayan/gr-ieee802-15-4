@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
-
+from pathlib import Path
 
 # NETWORK CONFIGURATION
 NUMBER_OF_LOOPS = 2
@@ -44,6 +44,8 @@ class Strategy:
 
 STRATEGY = Strategy.lcfs_pd
 
+# LOGGING CONFIGURATION
+
 
 def get_strategy_abbreviation():
     if STRATEGY == Strategy.fcfs_td:
@@ -58,6 +60,9 @@ def get_strategy_abbreviation():
         return "FCFS_TOD_FD"
     elif STRATEGY == Strategy.random:
         return "WO_BEACON"
+
+RESULTS_FOLDER_PATH = "Logs/"
+strategy_path = Path(RESULTS_FOLDER_PATH + get_strategy_abbreviation())
 
 
 # GUI CONFIGURATION

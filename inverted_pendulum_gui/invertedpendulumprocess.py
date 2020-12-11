@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+import datetime
 import control
 import control.matlab
 import math
@@ -30,10 +31,11 @@ from config import Q as Q
 from config import R as R
 import config
 import scipy
+import os
 import warnings
 from pathlib import Path
 import json
-from multiprocessing import Process, Queue, Lock
+from multiprocessing import Process, Queue
 import time
 from protocol import Protocol
 from queue import Empty
@@ -61,13 +63,12 @@ class InvertedPendulumProcess(Process):
     Perhaps, this Process should have its own logger
     """
 
-    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue, _logging_lock: Lock):
+    def __init__(self, loop_id: int, ctrl_to_comm_queue: Queue, ctrl_to_gui_queue: Queue, comm_to_ctrl_queue: Queue):
         # Process related initialization
         super().__init__(target=self.run, args=(None,))
         self.to_comm_queue = ctrl_to_comm_queue
         self.to_gui_queue = ctrl_to_gui_queue
         self.from_comm_queue = comm_to_ctrl_queue
-        self.log_lock = _logging_lock
 
         # Control related initialization
         self.init_model()
@@ -112,7 +113,6 @@ class InvertedPendulumProcess(Process):
                 raise err
 
     def main_loop(self, num_steps: int) -> None:
-        # asyncio_loop = asyncio.get_running_loop()
         t_last = 0
         while self.k < num_steps:
             t_now = time.perf_counter()
@@ -131,9 +131,8 @@ class InvertedPendulumProcess(Process):
                 time.sleep(0.001)
 
         self.emit_simulation_complete()
-
         self.print("completed measurement! Exiting...")
-        # TODO execute logging & completion signals etc.
+
         return
 
     def run(self):
@@ -270,66 +269,34 @@ class InvertedPendulumProcess(Process):
             self.to_gui_queue.put(msg, block=True)
         self.print("Simulation complete signal sent!")
 
-    def log_control_results(self):
-        self.log_lock.acquire()
+    def log_control_results(self, folder_path) -> None:
         try:
-            with open(self.folder_path + "/Loop_{}/send_time.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'send time': cli.send_time[0].tolist()}, f, ensure_ascii=False, indent=4)
-            with open(self.folder_path + "/Loop_{}/receive_time.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'receive time': cli.receive_time[0].tolist()}, f, ensure_ascii=False, indent=4)
-            with open(self.folder_path + "/Loop_{}/rtt.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'round trip time': (cli.receive_time[0] - cli.send_time[0]).tolist()}, f, ensure_ascii=False, indent=4)
+            # Age of Information
+            with open(folder_path + f"/Loop_{self.loop_id}/aoi.json", 'w', encoding='utf-8') as f:
+                json.dump({'age of information': self.aoi_list[0].tolist()}, f, ensure_ascii=False, indent=4)
 
-            with open(self.folder_path + "/Loop_{}/aoi.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'age of information': mdl.aoi_list[0].tolist()}, f, ensure_ascii=False, indent=4)
-            with open(self.folder_path + "/Loop_{}/update_time.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'update time': mdl.update_time[0].tolist()}, f, ensure_ascii=False, indent=4)
-            with open(self.folder_path + "/Loop_{}/plant_state.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'cart position': mdl.plant_values[0].tolist(), 'cart velocity': mdl.plant_values[1].tolist(),
-                           'pendulum angle': mdl.plant_values[2].tolist(), 'angular speed': mdl.plant_values[3].tolist()},
+            # Update time
+            with open(folder_path + f"/Loop_{self.loop_id}/update_time.json", 'w', encoding='utf-8') as f:
+                json.dump({'update time': self.update_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+
+            # Plant state evolution
+            with open(folder_path + f"/Loop_{self.loop_id}/plant_state.json", 'w', encoding='utf-8') as f:
+                json.dump({'cart position': self.plant_values[0].tolist(), 'cart velocity': self.plant_values[1].tolist(),
+                           'pendulum angle': self.plant_values[2].tolist(), 'angular speed': self.plant_values[3].tolist()},
                           f, ensure_ascii=False, indent=4)
-            with open(self.folder_path + "/Loop_{}/control_state.json".format(p_num), 'w', encoding='utf-8') as f:
-                json.dump({'control value': mdl.control_values[0].tolist()}, f, ensure_ascii=False, indent=4)
 
-                p_num += 1
+            # Control input evolution
+            with open(folder_path + f"/Loop_{self.loop_id}/control_state.json", 'w', encoding='utf-8') as f:
+                json.dump({'control value': self.control_values[0].tolist()}, f, ensure_ascii=False, indent=4)
+
         finally:
-            self.log_lock.release()
+            self.print("Logging completed")
 
-
-    def create_log_folders(self):
+    def create_log_folders(self, measurement_folder_path: str) -> None:
         try:
-            last_log = 0
-            if not os.path.exists(self.folder_path + config.get_strategy_abbreviation()):
-                try:
-                    os.makedirs(self.folder_path + config.get_strategy_abbreviation())
-                except:
-                    print("Folder could not be created!")
-                    exit(1)
-            p = Path(self.folder_path + config.get_strategy_abbreviation())
-            for folder in p.iterdir():
-                if folder.is_dir():
-                    if "Measurement_" in folder.stem:
-                        log_num = folder.stem.replace('Measurement_', '')
-                        if last_log < int(log_num):
-                            last_log = int(log_num)
-            self.folder_path = self.folder_path + config.get_strategy_abbreviation() + "/Measurement_{}/".format(last_log + 1)
-            time.sleep(0.1)
-            os.makedirs(self.folder_path)
+            os.makedirs(measurement_folder_path + f"/Loop_{self.loop_id}")
         except:
-            print("Folder could not be created!")
-        with open(self.folder_path + "config.json", 'w', encoding='utf-8') as f:
-            json.dump({'log time': str(write_time),
-                       'number of loops': config.NUMBER_OF_LOOPS,
-                       'simulation duration': config.SIMULATION_DURATION_SECONDS,
-                       'sampling period': config.SAMPLING_PERIOD_S,
-                       'Strategy': config.STRATEGY,
-                       'GUI Enable': config.SHOW_GUI,
-                       'Q': config.Q.flatten().tolist(),
-                       'R': config.R.flatten().tolist()
-                       }, f, ensure_ascii=False, indent=4)
-        for p_num in range(1, config.NUMBER_OF_LOOPS + 1):
-            try:
-                os.makedirs(self.folder_path + "/Loop_{}".format(p_num))
-            except:
-                print("Folder could not be created!")
-                exit(1)
+            self.print("Loop folder could not be created!")
+            raise
+
+
