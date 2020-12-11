@@ -20,8 +20,7 @@ import control
 import control.matlab
 import math
 import time
-from PySide2.QtCore import QThread, Signal,Slot, QObject, QTimer
-from protocol import Data,Protocol
+from protocol import Protocol
 from config import COEFFICIENT_OF_FRICTION_FOR_CART as b
 from config import MASS_MOMENT_OF_INERTIA_OF_THE_PENDULUM as I
 from config import GRAVITATIONAL_COEFFICIENT as g
@@ -42,11 +41,10 @@ import warnings
 # client -> qt signal: control
 # server <- sock: state
 # widget <- qt signal: state
-class InvertedPendulum(QThread):
+class InvertedPendulum():
 
     def __init__(self, plant_id):
         self.init_model()
-        self.Data = Data()
         super().__init__()
         self.plant_id = plant_id
         self.update_time = np.zeros(shape=(1, int(math.ceil(T_sim / T_s)) + 1))
