@@ -1,4 +1,4 @@
-from multiprocessing import Process, Queue, Lock
+from multiprocessing import Process, Queue
 from protocol import Protocol, P2C_PACKET_SIZE_bytes
 import select
 import socket
@@ -9,7 +9,7 @@ from queue import Empty
 import logging
 import sys
 import struct
-import asyncio
+import json
 
 
 class CPSocket(socket.socket):
@@ -19,7 +19,7 @@ class CPSocket(socket.socket):
 
 
 class ControlProcessHandler:
-    def __init__(self, _loop_id, _l_port, _s_port, _queue: asyncio.Queue):
+    def __init__(self, _loop_id, _l_port, _s_port, _queue: Queue):
         self.loop_id = _loop_id
         self.l_port = _l_port
         self.s_port = _s_port
@@ -30,7 +30,6 @@ class ControlProcessHandler:
 
     def bind_to_listen_port(self):
         self.l_sock.bind(('127.0.0.1', self.l_port))
-
 
 
 class CommunicationProcess(Process):
@@ -44,7 +43,7 @@ class CommunicationProcess(Process):
      -- a queue to write: N control processes-- 1 x queue --> 1 communication process
      -- N asyncio.Queue to read: 1 communication process -- N x queues --> N control processes
     """
-    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_queues: dict, _logging_lock: Lock, cpu_bound: bool = True):
+    def __init__(self, _ctrl_to_comm_queue: Queue, _comm_to_ctrl_queues: dict, cpu_bound: bool = True):
         if cpu_bound:
             run = self.run
         else:
@@ -55,8 +54,6 @@ class CommunicationProcess(Process):
         super().__init__(target=run, args=(None,))
         self.from_control_queue = _ctrl_to_comm_queue
         self.to_control_queues = _comm_to_ctrl_queues
-        self.log_lock = _logging_lock
-
         # Create ports for sockets
         # Communication process decides which socket belongs to which loop. Not the main anymore!
         s_ports = collections.deque(range(config.PLANT_SEND_PORT_START, config.PLANT_SEND_PORT_STOP))
@@ -138,8 +135,15 @@ class CommunicationProcess(Process):
                 print(err)
                 self.print(f"decode_state() failed due to unknown data: {data}")
                 continue
-    def log_communication_results(self):
-        pass
+
+    def log_communication_results(self, measurement_folder):
+        with open(measurement_folder + f"/Loop_{self.loop_id}/send_time.json", 'w', encoding='utf-8') as f:
+            json.dump({'send time': self.send_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+        with open(measurement_folder + f"/Loop_{self.loop_id}/receive_time.json", 'w', encoding='utf-8') as f:
+            json.dump({'receive time': self.receive_time[0].tolist()}, f, ensure_ascii=False, indent=4)
+        with open(measurement_folder + f"/Loop_{self.loop_id}/rtt.json", 'w', encoding='utf-8') as f:
+            json.dump({'round trip time': (self.receive_time[0] - self.send_time[0]).tolist()}, f, ensure_ascii=False,
+                      indent=4)
 
 
     # async def main(self):
