@@ -73,7 +73,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [48, 488]
+    coordinate: [84, 490]
     rotation: 0
     state: enabled
 - name: blocks_delay_0
@@ -92,7 +92,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [224, 516]
+    coordinate: [305, 518]
     rotation: 0
     state: enabled
 - name: blocks_float_to_complex_0
@@ -108,7 +108,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [520, 488]
+    coordinate: [771, 488]
     rotation: 0
     state: enabled
 - name: blocks_multiply_xx_0
@@ -126,7 +126,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [920, 400]
+    coordinate: [951, 367]
     rotation: 180
     state: enabled
 - name: blocks_packed_to_unpacked_xx_0
@@ -180,8 +180,8 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1116, 213]
-    rotation: 0
+    coordinate: [1363, 282]
+    rotation: 270
     state: enabled
 - name: blocks_sub_xx_0
   id: blocks_sub_xx
@@ -217,7 +217,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [336, 508]
+    coordinate: [535, 510]
     rotation: 0
     state: enabled
 - name: blocks_tagged_stream_multiply_length_0
@@ -236,7 +236,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [592, 384]
+    coordinate: [506, 383]
     rotation: 180
     state: enabled
 - name: blocks_vector_source_x_0
@@ -256,7 +256,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1072, 412]
+    coordinate: [1167, 347]
     rotation: 180
     state: enabled
 - name: digital_chunks_to_symbols_xx_0
@@ -303,7 +303,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [852, 205]
+    coordinate: [964, 218]
     rotation: 0
     state: enabled
 - name: digital_clock_recovery_mm_xx_0
@@ -344,7 +344,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [304, 364.0]
+    coordinate: [89, 364]
     rotation: 180
     state: enabled
 - name: ieee802_15_4_access_code_prefixer_0
@@ -429,7 +429,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1074, 358]
+    coordinate: [1151, 293]
     rotation: 180
     state: enabled
 - name: note_3
@@ -442,9 +442,54 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1085, 161]
+    coordinate: [1071, 165]
     rotation: 0
     state: enabled
+- name: note_4
+  id: note
+  parameters:
+    alias: ''
+    comment: ''
+    note: The Half Sine filter is used for ZigBee 2450 MHz measurements. The Half
+      Sine pulse shaping filter changes the vector diagram of an OQPSK signal from
+      a square to a circle. This eliminates any amplitude variations and turns the
+      OQPSK signal into a constant envelope modulation. The OQPSK now resembles MSK.
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [974, 307]
+    rotation: 0
+    state: true
+- name: note_5
+  id: note
+  parameters:
+    alias: ''
+    comment: ''
+    note: 'Chunk to symbol block is compliant with the spread spectrum of 802.15.4:
+      First 16 symbols represent the 32 bits of 0. Second 16 symbols represent the
+      32 bits(chip) of 1 ...'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [966, 110]
+    rotation: 0
+    state: true
+- name: note_6
+  id: note
+  parameters:
+    alias: ''
+    comment: ''
+    note: 'Half symbol duration delay due to "offset"  qpsk, -->  Q is delayed by
+      2 '
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [322, 449]
+    rotation: 0
+    state: true
 - name: pad_sink_0
   id: pad_sink
   parameters:
@@ -460,7 +505,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [744, 500]
+    coordinate: [1008, 500]
     rotation: 0
     state: enabled
 - name: pad_sink_1

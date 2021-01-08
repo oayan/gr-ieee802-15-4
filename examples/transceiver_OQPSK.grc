@@ -45,6 +45,7 @@ blocks:
     label4: ''
     labels: '[str(i) for i in range(11, 27)]'
     num_opts: '0'
+    option0: '0'
     option1: '1'
     option2: '2'
     option3: '3'
@@ -59,6 +60,30 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [1064, 8]
+    rotation: 0
+    state: enabled
+- name: freq_plant_rx
+  id: variable
+  parameters:
+    comment: ''
+    value: '2480000000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [542, 25]
+    rotation: 0
+    state: enabled
+- name: freq_plant_tx
+  id: variable
+  parameters:
+    comment: ''
+    value: '2480000000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [647, 22]
     rotation: 0
     state: enabled
 - name: rx_gain
@@ -137,7 +162,7 @@ blocks:
     bus_structure: null
     coordinate: [72, 196.0]
     rotation: 0
-    state: disabled
+    state: enabled
 - name: blocks_socket_pdu_0_0
   id: blocks_socket_pdu
   parameters:
@@ -177,7 +202,7 @@ blocks:
     bus_structure: null
     coordinate: [376, 612.0]
     rotation: 180
-    state: true
+    state: enabled
 - name: foo_wireshark_connector_0
   id: foo_wireshark_connector
   parameters:
@@ -213,7 +238,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [344, 364.0]
+    coordinate: [344, 365]
     rotation: 180
     state: enabled
 - name: ieee802_15_4_oqpsk_phy_0
@@ -248,20 +273,6 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [352, 208.0]
-    rotation: 0
-    state: enabled
-- name: note_0
-  id: note
-  parameters:
-    alias: ''
-    comment: ''
-    note: This is for loopback testing. Disable this block an enable the USRP blocks
-      for over-the-air transmission.
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [352, 724.0]
     rotation: 0
     state: enabled
 - name: note_1
@@ -308,7 +319,7 @@ blocks:
     color9: '"dark green"'
     comment: ''
     ctrlpanel: 'False'
-    fc: '0'
+    fc: '2480000000'
     fftsize: '1024'
     freqhalf: 'True'
     grid: 'False'
@@ -354,9 +365,9 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [640, 580.0]
+    coordinate: [641, 575]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: uhd_usrp_sink_0
   id: uhd_usrp_sink
   parameters:
@@ -426,7 +437,7 @@ blocks:
     bw7: '0'
     bw8: '0'
     bw9: '0'
-    center_freq0: freq
+    center_freq0: freq_plant_tx
     center_freq1: '0'
     center_freq10: '0'
     center_freq11: '0'
@@ -468,7 +479,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dev_addr: ''
+    dev_addr: serial=31EE39B
     dev_args: '""'
     gain0: tx_gain
     gain1: '0'
@@ -502,7 +513,7 @@ blocks:
     gain7: '0'
     gain8: '0'
     gain9: '0'
-    len_tag_name: pdu_length
+    len_tag_name: packet_len
     lo_export0: 'False'
     lo_export1: 'False'
     lo_export10: 'False'
@@ -630,7 +641,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [640, 444.0]
+    coordinate: [695, 436]
     rotation: 0
     state: disabled
 - name: uhd_usrp_source_0
@@ -702,7 +713,7 @@ blocks:
     bw7: '0'
     bw8: '0'
     bw9: '0'
-    center_freq0: freq
+    center_freq0: freq_plant_rx
     center_freq1: '0'
     center_freq10: '0'
     center_freq11: '0'
@@ -744,7 +755,7 @@ blocks:
     clock_source6: ''
     clock_source7: ''
     comment: ''
-    dc_offs_enb0: '""'
+    dc_offs_enb0: 'False'
     dc_offs_enb1: '""'
     dc_offs_enb10: '""'
     dc_offs_enb11: '""'
@@ -776,7 +787,7 @@ blocks:
     dc_offs_enb7: '""'
     dc_offs_enb8: '""'
     dc_offs_enb9: '""'
-    dev_addr: ''
+    dev_addr: serial=31E9EF4
     dev_args: '""'
     gain0: rx_gain
     gain1: '0'
@@ -810,7 +821,7 @@ blocks:
     gain7: '0'
     gain8: '0'
     gain9: '0'
-    iq_imbal_enb0: '""'
+    iq_imbal_enb0: 'False'
     iq_imbal_enb1: '""'
     iq_imbal_enb10: '""'
     iq_imbal_enb11: '""'
@@ -1001,7 +1012,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [80, 460.0]
+    coordinate: [64, 486]
     rotation: 0
     state: disabled
 
