@@ -148,7 +148,7 @@ public:
 		std::memcpy(buf, pmt::blob_data(blob), 2);
 		for(rime_connection *conn : d_connections){
 			if(conn->channel() == buf[0] && (conn->channel() >> 8) == buf[1]){
-                std::cout << "rime_stack: Received message from MAC layer on channel " << conn->channel() << std::endl;
+                // std::cout << "rime_stack: Received message from MAC layer on channel " << conn->channel() << std::endl;
 				conn->unpack(blob);
 				return;
 			}
