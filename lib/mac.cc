@@ -164,11 +164,6 @@ void print_message() {
 	dout << std::endl;
 }
 
-int get_num_packet_errors(){ return d_num_packet_errors; }
-
-int get_num_packets_received(){ return d_num_packets_received; }
-
-float get_packet_error_ratio(){ return float(d_num_packet_errors)/d_num_packets_received; }
 
 private:
 	bool        d_debug;
