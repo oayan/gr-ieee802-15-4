@@ -42,7 +42,7 @@ stubborn_sender::start(long int retxtime, int retxs)
 	gr::thread::thread t(&stubborn_sender::thread_func, this);
 	t.detach();
 
-	dout << "sender started" << std::endl;
+	dout << "stubborn_sender: sender started" << std::endl;
 
 }
 
